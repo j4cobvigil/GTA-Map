@@ -38,9 +38,9 @@
       strokeWeight: 6,
     },
     navigation: {
-      strokeColor: "#00a8ff",
+      strokeColor: "#00b7ff",
       strokeOpacity: 1,
-      strokeWeight: 8,
+      strokeWeight: 12,
     },
   };
   const businessTypes = [
@@ -79,6 +79,7 @@
   let routePath = [];
   let routeSteps = [];
   let routeLengthMeters = 0;
+  let navigationRouteLine = null;
   let vehicleMarker = null;
   let navigationMode = null;
   let watchId = null;
@@ -390,18 +391,55 @@
   }
 
   function setRouteLineStyle(mode = "normal") {
+    const directions = directionsRenderer?.getDirections();
+
     directionsRenderer?.setOptions({
       polylineOptions: routeLineStyle[mode] || routeLineStyle.normal,
+    });
+
+    if (directions) {
+      directionsRenderer.setDirections(directions);
+    }
+  }
+
+  function clearNavigationRouteLine() {
+    if (!navigationRouteLine) {
+      return;
+    }
+
+    navigationRouteLine.setMap(null);
+    navigationRouteLine = null;
+  }
+
+  function showNavigationRouteLine() {
+    clearNavigationRouteLine();
+
+    if (!map || !routePath.length || !google.maps.Polyline) {
+      return;
+    }
+
+    navigationRouteLine = new google.maps.Polyline({
+      map,
+      path: routePath,
+      clickable: false,
+      geodesic: true,
+      zIndex: 2000,
+      ...routeLineStyle.navigation,
     });
   }
 
   function prepareRoute(result) {
     currentRoute = result;
-    routePath = result.routes[0]?.overview_path || [];
+    const route = result.routes[0];
+    const legs = route?.legs || [];
+    const detailedPath = legs.flatMap((leg) => (
+      leg.steps || []
+    ).flatMap((step) => step.path || []));
+    routePath = detailedPath.length ? detailedPath : route?.overview_path || [];
     routeLengthMeters = getPathLength(routePath);
     let cursor = 0;
 
-    routeSteps = (result.routes[0]?.legs || []).flatMap((leg) => (
+    routeSteps = legs.flatMap((leg) => (
       leg.steps || []
     ).map((step) => {
       const start = cursor;
@@ -432,6 +470,7 @@
       heading: map?.getHeading?.() || 0,
     });
     setRouteLineStyle("navigation");
+    showNavigationRouteLine();
     document.body.classList.add("is-driving");
     navigationHud.hidden = false;
     directionsPanel.hidden = true;
@@ -468,6 +507,7 @@
     }
 
     stopVehicleLights();
+    clearNavigationRouteLine();
 
     if (vehicleMarker) {
       vehicleMarker.setMap(null);
