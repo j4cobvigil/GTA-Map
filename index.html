@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Open World Google Maps Skin</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <section class="toolbar" aria-label="Map controls">
+        <div>
+          <h1>Open World Map Skin</h1>
+          <p>Google Maps JavaScript API style preview</p>
+        </div>
+        <form id="key-form" class="key-form">
+          <label for="api-key">API key</label>
+          <input id="api-key" name="api-key" type="password" autocomplete="off" placeholder="AIza...">
+          <button type="submit">Load Map</button>
+        </form>
+      </section>
+      <section id="map" class="map-surface" aria-label="Styled map preview">
+        <div id="fallback" class="fallback-map">
+          <span class="district district-a">Downtown</span>
+          <span class="district district-b">Vinewood</span>
+          <span class="district district-c">Harbor</span>
+          <span class="district district-d">Canyon</span>
+        </div>
+      </section>
+    </main>
+    <script src="open-world-game-map-style.js"></script>
+    <script src="preview.js"></script>
+  </body>
+</html>
