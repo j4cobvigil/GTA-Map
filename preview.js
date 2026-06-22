@@ -15,6 +15,7 @@
   const stopNavigationButton = document.querySelector("#stop-navigation");
   const keyForm = document.querySelector("#key-form");
   const keyInput = document.querySelector("#api-key");
+  const mapElement = document.querySelector("#map");
   const fallback = document.querySelector("#fallback");
   const params = new URLSearchParams(window.location.search);
   const urlKey = params.get("key");
@@ -24,8 +25,12 @@
   const configuredMapId = typeof window.GOOGLE_MAPS_MAP_ID === "string"
     ? window.GOOGLE_MAPS_MAP_ID.trim()
     : "";
-  const useVectorMapId = window.GOOGLE_MAPS_USE_VECTOR_MAP_ID === true
-    || params.get("vector") === "1";
+  const vectorPreference = window.GOOGLE_MAPS_USE_VECTOR_MAP_ID;
+  const forceVectorMap = params.get("vector") === "1";
+  const forceFlatMap = params.get("flat") === "1";
+  const useVectorMapId = Boolean(configuredMapId)
+    && !forceFlatMap
+    && (forceVectorMap || vectorPreference !== false);
   const businessTypes = [
     "restaurant",
     "gas_station",
@@ -52,6 +57,7 @@
   let directionsService;
   let directionsRenderer;
   let placesService;
+  let mapUsesVectorId = false;
   let businessMarkers = [];
   let hasSubmittedRoute = false;
   let routeTimer = 0;
@@ -68,6 +74,9 @@
   let demoStartedAt = 0;
   let lastVehiclePosition = null;
   let currentLocationCache = null;
+  let lastVehicleHeading = 0;
+  let vehicleLightFrame = 0;
+  let vehicleLightTimer = 0;
   const vehicleIconCache = new Map();
 
   function setStatus(message, tone = "idle") {
@@ -161,81 +170,111 @@
     return nextStep.instruction;
   }
 
-  function makeVehicleIcon(heading) {
+  function makeVehicleIcon(heading, lightFrame = vehicleLightFrame) {
     const normalizedHeading = Math.round((((heading % 360) + 360) % 360) / 5) * 5;
-    const cachedIcon = vehicleIconCache.get(normalizedHeading);
+    const normalizedFrame = ((lightFrame % 12) + 12) % 12;
+    const cacheKey = `${normalizedHeading}:${normalizedFrame}`;
+    const cachedIcon = vehicleIconCache.get(cacheKey);
 
     if (cachedIcon) {
       return cachedIcon;
     }
 
+    const lightPalette = ["#ff375f", "#ffb800", "#54f2f2", "#5eff7d", "#8e7bff", "#ff63d8"];
+    const lightPositions = [
+      { x: 18, y: 62 },
+      { x: 28, y: 73 },
+      { x: 42, y: 78 },
+      { x: 56, y: 78 },
+      { x: 70, y: 73 },
+      { x: 80, y: 62 },
+      { x: 66, y: 54 },
+      { x: 30, y: 54 },
+    ];
+    const lights = lightPositions.map((point, index) => {
+      const color = lightPalette[(index + normalizedFrame) % lightPalette.length];
+      const active = index === normalizedFrame % lightPositions.length;
+      const radius = active ? 5.2 : 3.7;
+      const opacity = active ? 1 : 0.78;
+
+      return `
+        <circle cx="${point.x}" cy="${point.y}" r="${radius + 4}" fill="${color}" opacity="${active ? 0.28 : 0.12}"/>
+        <circle cx="${point.x}" cy="${point.y}" r="${radius}" fill="${color}" stroke="#050605" stroke-width="1.5" opacity="${opacity}"/>
+        <circle cx="${point.x - 1.2}" cy="${point.y - 1.4}" r="1.2" fill="#ffffff" opacity="0.9"/>
+      `;
+    }).join("");
     const svg = `
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 120">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 112">
         <defs>
-          <linearGradient id="paint" x1="18" x2="78" y1="18" y2="104" gradientUnits="userSpaceOnUse">
-            <stop offset="0" stop-color="#ff5a47"/>
-            <stop offset="0.45" stop-color="#b81919"/>
-            <stop offset="1" stop-color="#5a0707"/>
+          <radialGradient id="dome" cx="46%" cy="28%" r="62%">
+            <stop offset="0" stop-color="#f7ffff"/>
+            <stop offset="0.28" stop-color="#9ee7f1"/>
+            <stop offset="0.68" stop-color="#26616e"/>
+            <stop offset="1" stop-color="#071519"/>
           </linearGradient>
-          <linearGradient id="hood" x1="27" x2="69" y1="9" y2="44" gradientUnits="userSpaceOnUse">
-            <stop offset="0" stop-color="#ff8a74"/>
-            <stop offset="1" stop-color="#851111"/>
-          </linearGradient>
-          <linearGradient id="glass" x1="29" x2="67" y1="28" y2="58" gradientUnits="userSpaceOnUse">
-            <stop offset="0" stop-color="#d8ffff"/>
-            <stop offset="0.45" stop-color="#5ba5ad"/>
-            <stop offset="1" stop-color="#102b33"/>
-          </linearGradient>
-          <radialGradient id="chrome" cx="50%" cy="45%" r="58%">
+          <linearGradient id="saucer" x1="15" x2="83" y1="46" y2="83" gradientUnits="userSpaceOnUse">
             <stop offset="0" stop-color="#ffffff"/>
-            <stop offset="0.28" stop-color="#d8e2e4"/>
-            <stop offset="0.55" stop-color="#7b898c"/>
-            <stop offset="0.82" stop-color="#f4f7f7"/>
-            <stop offset="1" stop-color="#41494c"/>
+            <stop offset="0.16" stop-color="#8f9da0"/>
+            <stop offset="0.38" stop-color="#f1f6f7"/>
+            <stop offset="0.62" stop-color="#545e62"/>
+            <stop offset="0.84" stop-color="#dce4e6"/>
+            <stop offset="1" stop-color="#2d3437"/>
+          </linearGradient>
+          <linearGradient id="belly" x1="22" x2="74" y1="68" y2="91" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#343d3f"/>
+            <stop offset="0.5" stop-color="#d6e0e2"/>
+            <stop offset="1" stop-color="#262d30"/>
+          </linearGradient>
+          <radialGradient id="beam" cx="50%" cy="10%" r="70%">
+            <stop offset="0" stop-color="#95fff2" stop-opacity="0.5"/>
+            <stop offset="0.58" stop-color="#55ffd8" stop-opacity="0.15"/>
+            <stop offset="1" stop-color="#55ffd8" stop-opacity="0"/>
           </radialGradient>
           <filter id="shadow" x="-25%" y="-20%" width="150%" height="150%">
             <feDropShadow dx="0" dy="5" stdDeviation="4" flood-color="#050605" flood-opacity="0.75"/>
           </filter>
+          <filter id="glow" x="-90%" y="-90%" width="280%" height="280%">
+            <feGaussianBlur stdDeviation="3.2" result="blur"/>
+            <feMerge>
+              <feMergeNode in="blur"/>
+              <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+          </filter>
         </defs>
-        <g transform="rotate(${normalizedHeading} 48 60)" filter="url(#shadow)">
-          <path d="M18 39 C19 23 29 11 48 8 C67 11 77 23 78 39 L84 91 C85 102 77 110 65 110 H31 C19 110 11 102 12 91 Z" fill="#050605"/>
-          <path d="M22 40 C23 26 32 15 48 12 C64 15 73 26 74 40 L79 91 C80 98 75 104 66 104 H30 C21 104 16 98 17 91 Z" fill="url(#paint)"/>
-          <path d="M31 21 C35 15 41 12 48 11 C55 12 61 15 65 21 L70 42 H26 Z" fill="url(#hood)"/>
-          <path d="M30 47 L66 47 L71 70 C65 74 56 76 48 76 C40 76 31 74 25 70 Z" fill="#280b0b" opacity="0.72"/>
-          <path d="M32 45 C35 35 40 29 48 28 C56 29 61 35 64 45 L60 58 H36 Z" fill="url(#glass)" stroke="#050605" stroke-width="2"/>
-          <path d="M25 73 C31 80 39 84 48 84 C57 84 65 80 71 73 L73 96 C68 100 59 102 48 102 C37 102 28 100 23 96 Z" fill="#661010"/>
-          <path d="M29 77 L38 83 M67 77 L58 83 M32 96 H64" fill="none" stroke="#ff7a5e" stroke-width="3" stroke-linecap="round"/>
-          <path d="M21 43 H12 L13 84 H21 Z M75 43 H84 L83 84 H75 Z" fill="#0d0d0c"/>
-          <circle cx="18" cy="48" r="8" fill="#050605"/>
-          <circle cx="18" cy="48" r="5" fill="url(#chrome)"/>
-          <circle cx="18" cy="82" r="8" fill="#050605"/>
-          <circle cx="18" cy="82" r="5" fill="url(#chrome)"/>
-          <circle cx="78" cy="48" r="8" fill="#050605"/>
-          <circle cx="78" cy="48" r="5" fill="url(#chrome)"/>
-          <circle cx="78" cy="82" r="8" fill="#050605"/>
-          <circle cx="78" cy="82" r="5" fill="url(#chrome)"/>
-          <circle cx="18" cy="48" r="2" fill="#f7ffff"/>
-          <circle cx="18" cy="82" r="2" fill="#f7ffff"/>
-          <circle cx="78" cy="48" r="2" fill="#f7ffff"/>
-          <circle cx="78" cy="82" r="2" fill="#f7ffff"/>
-          <path d="M27 27 L35 19 M61 19 L69 27" stroke="#f6d77b" stroke-width="3" stroke-linecap="round"/>
-          <path d="M36 15 C43 10 53 10 60 15" fill="none" stroke="#ffb4a2" stroke-width="2" opacity="0.75"/>
+        <g transform="rotate(${normalizedHeading} 48 56)" filter="url(#shadow)">
+          <path d="M28 72 L42 108 H54 L68 72 Z" fill="url(#beam)"/>
+          <path d="M34 50 C35 31 42 20 48 17 C54 20 61 31 62 50 Z" fill="#050605"/>
+          <path d="M37 50 C38 33 43 24 48 21 C53 24 58 33 59 50 Z" fill="url(#dome)"/>
+          <path d="M39 29 C43 24 49 22 55 27" fill="none" stroke="#ffffff" stroke-width="3" opacity="0.7" stroke-linecap="round"/>
+          <ellipse cx="48" cy="64" rx="43" ry="18" fill="#050605"/>
+          <ellipse cx="48" cy="61" rx="39" ry="15" fill="url(#saucer)"/>
+          <path d="M13 61 C20 73 35 80 48 80 C61 80 76 73 83 61 C75 72 61 77 48 77 C35 77 21 72 13 61 Z" fill="url(#belly)"/>
+          <ellipse cx="48" cy="63" rx="23" ry="8" fill="#111819" opacity="0.58"/>
+          <path d="M18 58 C30 50 66 50 78 58" fill="none" stroke="#ffffff" stroke-width="2" opacity="0.45" stroke-linecap="round"/>
+          <path d="M48 42 L56 59 H40 Z" fill="#f5d77d" opacity="0.72"/>
+          <g filter="url(#glow)">
+            ${lights}
+          </g>
+          <path d="M48 21 L48 11 M42 15 L54 15" stroke="#f5d77d" stroke-width="2.4" stroke-linecap="round"/>
+          <circle cx="48" cy="10" r="3.5" fill="${lightPalette[normalizedFrame % lightPalette.length]}" stroke="#050605" stroke-width="1.4"/>
         </g>
       </svg>
     `.trim();
     const icon = {
       url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
-      scaledSize: new google.maps.Size(54, 68),
-      anchor: new google.maps.Point(27, 34),
+      scaledSize: new google.maps.Size(62, 72),
+      anchor: new google.maps.Point(31, 36),
     };
 
-    vehicleIconCache.set(normalizedHeading, icon);
+    vehicleIconCache.set(cacheKey, icon);
     return {
       ...icon,
     };
   }
 
   function setVehiclePosition(position, heading) {
+    lastVehicleHeading = heading;
+
     if (!vehicleMarker) {
       vehicleMarker = new google.maps.Marker({
         map,
@@ -249,6 +288,29 @@
 
     vehicleMarker.setPosition(position);
     vehicleMarker.setIcon(makeVehicleIcon(heading));
+  }
+
+  function startVehicleLights() {
+    if (vehicleLightTimer) {
+      return;
+    }
+
+    vehicleLightTimer = window.setInterval(() => {
+      vehicleLightFrame = (vehicleLightFrame + 1) % 12;
+
+      if (vehicleMarker) {
+        vehicleMarker.setIcon(makeVehicleIcon(lastVehicleHeading));
+      }
+    }, 140);
+  }
+
+  function stopVehicleLights() {
+    if (!vehicleLightTimer) {
+      return;
+    }
+
+    window.clearInterval(vehicleLightTimer);
+    vehicleLightTimer = 0;
   }
 
   function moveCamera(position, heading) {
@@ -302,12 +364,18 @@
     demoDriveButton.disabled = !routePath.length;
   }
 
-  function enterNavigation(modeLabel) {
+  function enterNavigation(modeKey, modeLabel) {
     if (!currentRoute || !routePath.length) {
       setStatus("Route first, then start drive mode.", "error");
       return false;
     }
 
+    navigationMode = modeKey;
+    switchRouteMapMode(true, {
+      zoom: 18,
+      tilt: 67.5,
+      heading: map?.getHeading?.() || 0,
+    });
     document.body.classList.add("is-driving");
     navigationHud.hidden = false;
     directionsPanel.hidden = true;
@@ -320,10 +388,13 @@
       headingInteractionEnabled: true,
     });
     updateNavigationHud(0, modeLabel);
+    startVehicleLights();
     return true;
   }
 
   function stopNavigation() {
+    const wasNavigating = Boolean(navigationMode);
+
     document.body.classList.remove("is-driving");
     navigationHud.hidden = true;
     navigationMode = null;
@@ -339,6 +410,8 @@
       animationFrame = 0;
     }
 
+    stopVehicleLights();
+
     if (vehicleMarker) {
       vehicleMarker.setMap(null);
       vehicleMarker = null;
@@ -348,8 +421,13 @@
       directionsPanel.hidden = false;
     }
 
-    map.setTilt?.(0);
-    map.setHeading?.(0);
+    if (wasNavigating) {
+      switchRouteMapMode(useVectorMapId, {
+        tilt: useVectorMapId ? 67.5 : 45,
+        zoom: useVectorMapId ? Math.max(map?.getZoom?.() || 18, 18) : map?.getZoom?.() || 12,
+        heading: useVectorMapId ? map?.getHeading?.() || 0 : 0,
+      });
+    }
   }
 
   function parseCoordinates(value) {
@@ -454,6 +532,77 @@
   function clearBusinessMarkers() {
     businessMarkers.forEach((marker) => marker.setMap(null));
     businessMarkers = [];
+  }
+
+  function getCurrentMapCamera(useVectorMap) {
+    const center = map?.getCenter()?.toJSON() || { lat: 32.4207, lng: -104.2288 };
+    const zoom = map?.getZoom?.() || 12;
+    const heading = map?.getHeading?.() || 0;
+
+    return {
+      center,
+      zoom: useVectorMap ? Math.max(zoom, 18) : zoom,
+      tilt: useVectorMap ? 67.5 : 45,
+      heading,
+    };
+  }
+
+  function rebindAutocompleteBounds() {
+    originAutocomplete?.bindTo("bounds", map);
+    destinationAutocomplete?.bindTo("bounds", map);
+  }
+
+  function createRouteMap(useVectorMap = false, overrides = {}) {
+    const shouldUseVectorMap = Boolean(configuredMapId && useVectorMap);
+    const mapOptions = {
+      ...getCurrentMapCamera(shouldUseVectorMap),
+      ...overrides,
+    };
+
+    if (shouldUseVectorMap) {
+      mapOptions.mapId = configuredMapId;
+      mapOptions.styles = undefined;
+    }
+
+    clearBusinessMarkers();
+    map = window.createOpenWorldGameMap(mapElement, mapOptions);
+    mapUsesVectorId = shouldUseVectorMap;
+    placesService = google.maps.places ? new google.maps.places.PlacesService(map) : null;
+    map.addListener("idle", queueBusinessRefresh);
+
+    if (directionsRenderer) {
+      directionsRenderer.setMap(map);
+
+      if (currentRoute) {
+        directionsRenderer.setDirections(currentRoute);
+      }
+    }
+
+    rebindAutocompleteBounds();
+
+    if (!navigationMode) {
+      lastBusinessSearch = null;
+      refreshBusinesses();
+    }
+  }
+
+  function switchRouteMapMode(useVectorMap, overrides = {}) {
+    const shouldUseVectorMap = Boolean(configuredMapId && useVectorMap);
+
+    if (map && mapUsesVectorId === shouldUseVectorMap) {
+      if (typeof map.moveCamera === "function" && Object.keys(overrides).length) {
+        map.moveCamera({
+          center: overrides.center || map.getCenter(),
+          zoom: overrides.zoom || map.getZoom(),
+          tilt: overrides.tilt ?? map.getTilt?.() ?? 0,
+          heading: overrides.heading ?? map.getHeading?.() ?? 0,
+        });
+      }
+
+      return;
+    }
+
+    createRouteMap(shouldUseVectorMap, overrides);
   }
 
   function refreshBusinesses() {
@@ -568,19 +717,12 @@
     routeForm.hidden = false;
     directionsPanel.hidden = true;
 
-    const mapOptions = {
+    createRouteMap(useVectorMapId, {
       center: { lat: 32.4207, lng: -104.2288 },
-      zoom: 12,
-      tilt: 45,
+      zoom: useVectorMapId ? 18 : 12,
+      tilt: useVectorMapId ? 67.5 : 45,
       heading: 0,
-    };
-
-    if (configuredMapId && useVectorMapId) {
-      mapOptions.mapId = configuredMapId;
-      mapOptions.styles = undefined;
-    }
-
-    map = window.createOpenWorldGameMap(document.querySelector("#map"), mapOptions);
+    });
     autocompleteBounds = new google.maps.LatLngBounds(
       { lat: 32.05, lng: -104.65 },
       { lat: 32.8, lng: -103.85 },
@@ -597,7 +739,6 @@
         strokeWeight: 6,
       },
     });
-    placesService = google.maps.places ? new google.maps.places.PlacesService(map) : null;
     originAutocomplete = setupAutocomplete(originInput, (place) => {
       originPlace = place;
     });
@@ -614,7 +755,6 @@
       queueRoute();
     });
     travelModeSelect.addEventListener("change", queueRoute);
-    map.addListener("idle", queueBusinessRefresh);
     directionsRenderer.addListener("directions_changed", updateRouteSummary);
 
     startDriveButton.disabled = true;
@@ -711,11 +851,9 @@
   function startLiveDrive() {
     stopNavigation();
 
-    if (!enterNavigation("Live GPS")) {
+    if (!enterNavigation("live", "Live GPS")) {
       return;
     }
-
-    navigationMode = "live";
 
     if (!navigator.geolocation) {
       setStatus("GPS is not available here. Running preview drive.", "error");
@@ -773,11 +911,10 @@
   function startDemoDrive() {
     stopNavigation();
 
-    if (!enterNavigation("Preview Drive")) {
+    if (!enterNavigation("demo", "Preview Drive")) {
       return;
     }
 
-    navigationMode = "demo";
     demoStartedAt = 0;
     setStatus("Preview drive mode active.", "success");
     animationFrame = window.requestAnimationFrame(tickDemoDrive);

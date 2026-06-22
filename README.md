@@ -19,7 +19,7 @@ This project is ready to run through GitHub Pages.
 2. In the repo, go to Settings -> Pages and set the source to GitHub Actions.
 3. Go to Settings -> Secrets and variables -> Actions -> Variables.
 4. Add a repository variable named `GOOGLE_MAPS_API_KEY`.
-5. Optionally add `GOOGLE_MAPS_MAP_ID` if you create a vector Map ID in Google Cloud for stronger tilt/heading behavior.
+5. Add `GOOGLE_MAPS_MAP_ID` after you create and style the vector Map ID in Google Cloud.
 6. Run the workflow named `Deploy static Google Maps skin to GitHub Pages`.
 
 The workflow writes `config.js` only inside the Pages artifact, so the API key is not committed to the repository. It is still visible to browsers at runtime because Google Maps JavaScript API keys are client-side keys. Restrict the key in Google Cloud to the Maps JavaScript API and to your GitHub Pages referrer, for example:
@@ -43,7 +43,7 @@ Autocomplete and nearby business icons use the Places library. In Google Cloud, 
 
 Live GPS navigation requires HTTPS and browser location permission. GitHub Pages is HTTPS, so the phone will prompt for location access when `Start Drive` is tapped. The web app can simulate the Google Maps app navigation feel, but it is still browser-based and does not have the full native Google Maps turn-by-turn navigation SDK.
 
-The GTA-inspired local JSON style is the default. A plain vector Map ID uses Google Cloud styling and can make the map look like regular Google Maps again. If you want to test vector mode anyway, open the site with `?vector=1` or add an Actions variable named `GOOGLE_MAPS_USE_VECTOR_MAP_ID` with the value `true`. For the best of both worlds, customize the Map ID in Google Cloud to match the same dark green, cream-road style before enabling vector mode.
+When `GOOGLE_MAPS_MAP_ID` is present, the app uses that vector map by default so tilt/rotation work in navigation. Since your Map ID is styled in Google Cloud, that is the preferred path. To compare against the old local JSON fallback, open the site with `?flat=1`. To explicitly disable vector mode from GitHub, add an Actions variable named `GOOGLE_MAPS_USE_VECTOR_MAP_ID` with the value `false`.
 
 ## Preview
 
