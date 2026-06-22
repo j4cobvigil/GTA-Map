@@ -6,7 +6,7 @@ This is an original Google Maps JavaScript API route map inspired by open-world 
 
 - `open-world-game-map-style.json` is the reusable Google Maps style array.
 - `open-world-game-map-style.js` exposes `openWorldGameMapStyle`, `openWorldGameMapOptions`, and `createOpenWorldGameMap(...)`.
-- `index.html` is the route map page. It accepts addresses or latitude/longitude pairs for directions.
+- `index.html` is the route map page. It accepts addresses or latitude/longitude pairs for directions, with Places autocomplete when enabled.
 - `config.js` is a blank committed runtime config. GitHub Actions overwrites it during Pages deployment.
 - `serve-preview.cjs` starts a small localhost preview server.
 
@@ -33,6 +33,11 @@ https://j4cobvigil.github.io/GTA-Map/
 ```
 
 If the deployed page still asks for an API key, GitHub Pages is probably serving the committed blank `config.js`. Check that Settings -> Pages is set to GitHub Actions, confirm the `GOOGLE_MAPS_API_KEY` repository variable exists, then rerun the Pages workflow.
+
+Autocomplete and nearby business icons use the Places library. In Google Cloud, make sure the same API key is allowed to use:
+
+- Maps JavaScript API
+- Places API
 
 ## Preview
 
