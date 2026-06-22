@@ -170,8 +170,14 @@
     return nextStep.instruction;
   }
 
+  function getVehicleIconHeading(heading) {
+    // The vector drive camera already rotates with the road, so keep the UFO upright on screen.
+    return navigationMode && mapUsesVectorId ? 0 : heading;
+  }
+
   function makeVehicleIcon(heading, lightFrame = vehicleLightFrame) {
-    const normalizedHeading = Math.round((((heading % 360) + 360) % 360) / 5) * 5;
+    const displayHeading = getVehicleIconHeading(heading);
+    const normalizedHeading = Math.round((((displayHeading % 360) + 360) % 360) / 5) * 5;
     const normalizedFrame = ((lightFrame % 12) + 12) % 12;
     const cacheKey = `${normalizedHeading}:${normalizedFrame}`;
     const cachedIcon = vehicleIconCache.get(cacheKey);
@@ -212,19 +218,33 @@
             <stop offset="0.68" stop-color="#26616e"/>
             <stop offset="1" stop-color="#071519"/>
           </radialGradient>
-          <linearGradient id="saucer" x1="15" x2="83" y1="46" y2="83" gradientUnits="userSpaceOnUse">
+          <linearGradient id="domeGlass" x1="38" x2="60" y1="22" y2="51" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#ffffff" stop-opacity="0.86"/>
+            <stop offset="0.42" stop-color="#b9fbff" stop-opacity="0.28"/>
+            <stop offset="1" stop-color="#0b1d22" stop-opacity="0.1"/>
+          </linearGradient>
+          <linearGradient id="saucer" x1="8" x2="88" y1="43" y2="75" gradientUnits="userSpaceOnUse">
             <stop offset="0" stop-color="#ffffff"/>
-            <stop offset="0.16" stop-color="#8f9da0"/>
-            <stop offset="0.38" stop-color="#f1f6f7"/>
-            <stop offset="0.62" stop-color="#545e62"/>
-            <stop offset="0.84" stop-color="#dce4e6"/>
-            <stop offset="1" stop-color="#2d3437"/>
+            <stop offset="0.18" stop-color="#98a8ab"/>
+            <stop offset="0.34" stop-color="#f8ffff"/>
+            <stop offset="0.5" stop-color="#6a777a"/>
+            <stop offset="0.68" stop-color="#eef8f9"/>
+            <stop offset="0.86" stop-color="#525d60"/>
+            <stop offset="1" stop-color="#151a1d"/>
           </linearGradient>
-          <linearGradient id="belly" x1="22" x2="74" y1="68" y2="91" gradientUnits="userSpaceOnUse">
-            <stop offset="0" stop-color="#343d3f"/>
-            <stop offset="0.5" stop-color="#d6e0e2"/>
-            <stop offset="1" stop-color="#262d30"/>
+          <linearGradient id="rimEdge" x1="12" x2="84" y1="60" y2="85" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#151a1d"/>
+            <stop offset="0.22" stop-color="#79878a"/>
+            <stop offset="0.46" stop-color="#ecf7f8"/>
+            <stop offset="0.68" stop-color="#596568"/>
+            <stop offset="1" stop-color="#0a0d0f"/>
           </linearGradient>
+          <radialGradient id="belly" cx="50%" cy="35%" r="68%">
+            <stop offset="0" stop-color="#e7ffff"/>
+            <stop offset="0.32" stop-color="#5b7478"/>
+            <stop offset="0.7" stop-color="#182124"/>
+            <stop offset="1" stop-color="#050707"/>
+          </radialGradient>
           <radialGradient id="beam" cx="50%" cy="10%" r="70%">
             <stop offset="0" stop-color="#95fff2" stop-opacity="0.5"/>
             <stop offset="0.58" stop-color="#55ffd8" stop-opacity="0.15"/>
@@ -242,16 +262,21 @@
           </filter>
         </defs>
         <g transform="rotate(${normalizedHeading} 48 56)" filter="url(#shadow)">
-          <path d="M28 72 L42 108 H54 L68 72 Z" fill="url(#beam)"/>
-          <path d="M34 50 C35 31 42 20 48 17 C54 20 61 31 62 50 Z" fill="#050605"/>
+          <path d="M27 72 L41 108 H55 L69 72 Z" fill="url(#beam)"/>
+          <ellipse cx="48" cy="77" rx="30" ry="10" fill="#050707" opacity="0.54"/>
+          <path d="M10 59 C18 45 78 45 86 59 C80 75 65 84 48 84 C31 84 16 75 10 59 Z" fill="url(#rimEdge)"/>
+          <ellipse cx="48" cy="57" rx="43" ry="18" fill="#050707"/>
+          <ellipse cx="48" cy="54" rx="39" ry="16" fill="url(#saucer)"/>
+          <path d="M12 61 C21 72 35 78 48 78 C61 78 75 72 84 61 C76 76 62 86 48 86 C34 86 20 76 12 61 Z" fill="url(#rimEdge)"/>
+          <ellipse cx="48" cy="67" rx="29" ry="9" fill="url(#belly)" opacity="0.94"/>
+          <ellipse cx="48" cy="64" rx="19" ry="5.5" fill="#030606" opacity="0.52"/>
+          <path d="M18 55 C29 48 66 48 78 55" fill="none" stroke="#ffffff" stroke-width="2.5" opacity="0.56" stroke-linecap="round"/>
+          <path d="M21 63 C32 69 64 69 75 63" fill="none" stroke="#ffffff" stroke-width="1.6" opacity="0.22" stroke-linecap="round"/>
+          <path d="M34 50 C35 31 42 20 48 17 C54 20 61 31 62 50 Z" fill="#050707"/>
           <path d="M37 50 C38 33 43 24 48 21 C53 24 58 33 59 50 Z" fill="url(#dome)"/>
-          <path d="M39 29 C43 24 49 22 55 27" fill="none" stroke="#ffffff" stroke-width="3" opacity="0.7" stroke-linecap="round"/>
-          <ellipse cx="48" cy="64" rx="43" ry="18" fill="#050605"/>
-          <ellipse cx="48" cy="61" rx="39" ry="15" fill="url(#saucer)"/>
-          <path d="M13 61 C20 73 35 80 48 80 C61 80 76 73 83 61 C75 72 61 77 48 77 C35 77 21 72 13 61 Z" fill="url(#belly)"/>
-          <ellipse cx="48" cy="63" rx="23" ry="8" fill="#111819" opacity="0.58"/>
-          <path d="M18 58 C30 50 66 50 78 58" fill="none" stroke="#ffffff" stroke-width="2" opacity="0.45" stroke-linecap="round"/>
-          <path d="M48 42 L56 59 H40 Z" fill="#f5d77d" opacity="0.72"/>
+          <path d="M39 30 C43 24 50 22 56 28" fill="none" stroke="#ffffff" stroke-width="3" opacity="0.72" stroke-linecap="round"/>
+          <path d="M40 39 C43 35 52 33 57 39" fill="none" stroke="url(#domeGlass)" stroke-width="5" opacity="0.55" stroke-linecap="round"/>
+          <path d="M48 42 L57 60 H39 Z" fill="#f5d77d" opacity="0.72"/>
           <g filter="url(#glow)">
             ${lights}
           </g>
@@ -262,8 +287,8 @@
     `.trim();
     const icon = {
       url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
-      scaledSize: new google.maps.Size(62, 72),
-      anchor: new google.maps.Point(31, 36),
+      scaledSize: new google.maps.Size(70, 82),
+      anchor: new google.maps.Point(35, 41),
     };
 
     vehicleIconCache.set(cacheKey, icon);
