@@ -7,6 +7,7 @@ This is an original Google Maps JavaScript API route map inspired by open-world 
 - `open-world-game-map-style.json` is the reusable Google Maps style array.
 - `open-world-game-map-style.js` exposes `openWorldGameMapStyle`, `openWorldGameMapOptions`, and `createOpenWorldGameMap(...)`.
 - `index.html` is the route map page. It accepts addresses or latitude/longitude pairs for directions, with Places autocomplete when enabled.
+- After routing, `Start Drive` enters a tilted chase-camera navigation mode using live browser GPS when permission is granted. `Preview Drive` animates the vehicle along the route without GPS.
 - `config.js` is a blank committed runtime config. GitHub Actions overwrites it during Pages deployment.
 - `serve-preview.cjs` starts a small localhost preview server.
 
@@ -18,7 +19,8 @@ This project is ready to run through GitHub Pages.
 2. In the repo, go to Settings -> Pages and set the source to GitHub Actions.
 3. Go to Settings -> Secrets and variables -> Actions -> Variables.
 4. Add a repository variable named `GOOGLE_MAPS_API_KEY`.
-5. Run the workflow named `Deploy static Google Maps skin to GitHub Pages`.
+5. Optionally add `GOOGLE_MAPS_MAP_ID` if you create a vector Map ID in Google Cloud for stronger tilt/heading behavior.
+6. Run the workflow named `Deploy static Google Maps skin to GitHub Pages`.
 
 The workflow writes `config.js` only inside the Pages artifact, so the API key is not committed to the repository. It is still visible to browsers at runtime because Google Maps JavaScript API keys are client-side keys. Restrict the key in Google Cloud to the Maps JavaScript API and to your GitHub Pages referrer, for example:
 
@@ -38,6 +40,10 @@ Autocomplete and nearby business icons use the Places library. In Google Cloud, 
 
 - Maps JavaScript API
 - Places API
+
+Live GPS navigation requires HTTPS and browser location permission. GitHub Pages is HTTPS, so the phone will prompt for location access when `Start Drive` is tapped. The web app can simulate the Google Maps app navigation feel, but it is still browser-based and does not have the full native Google Maps turn-by-turn navigation SDK.
+
+For the most convincing 3D chase camera, create a vector Map ID in Google Cloud and add it as the optional `GOOGLE_MAPS_MAP_ID` Actions variable. Without a Map ID, the app still follows the route and tilts the camera where the browser/API allows it.
 
 ## Preview
 

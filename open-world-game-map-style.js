@@ -166,10 +166,14 @@ const openWorldGameMapOptions = {
 };
 
 function createOpenWorldGameMap(element, options = {}) {
+  const styles = Object.prototype.hasOwnProperty.call(options, "styles")
+    ? options.styles
+    : openWorldGameMapStyle;
+
   return new google.maps.Map(element, {
     ...openWorldGameMapOptions,
     ...options,
-    styles: options.styles || openWorldGameMapStyle,
+    styles,
   });
 }
 

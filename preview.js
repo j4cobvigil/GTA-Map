@@ -5,7 +5,14 @@
   const destinationInput = document.querySelector("#destination");
   const travelModeSelect = document.querySelector("#travel-mode");
   const swapRouteButton = document.querySelector("#swap-route");
+  const startDriveButton = document.querySelector("#start-drive");
+  const demoDriveButton = document.querySelector("#demo-drive");
   const directionsPanel = document.querySelector("#directions-panel");
+  const navigationHud = document.querySelector("#navigation-hud");
+  const navMode = document.querySelector("#nav-mode");
+  const navInstruction = document.querySelector("#nav-instruction");
+  const navDetail = document.querySelector("#nav-detail");
+  const stopNavigationButton = document.querySelector("#stop-navigation");
   const keyForm = document.querySelector("#key-form");
   const keyInput = document.querySelector("#api-key");
   const fallback = document.querySelector("#fallback");
@@ -13,6 +20,9 @@
   const urlKey = params.get("key");
   const configuredKey = typeof window.GOOGLE_MAPS_API_KEY === "string"
     ? window.GOOGLE_MAPS_API_KEY.trim()
+    : "";
+  const configuredMapId = typeof window.GOOGLE_MAPS_MAP_ID === "string"
+    ? window.GOOGLE_MAPS_MAP_ID.trim()
     : "";
   const businessTypes = [
     "restaurant",
@@ -45,10 +55,237 @@
   let routeTimer = 0;
   let businessTimer = 0;
   let lastBusinessSearch = null;
+  let currentRoute = null;
+  let routePath = [];
+  let routeSteps = [];
+  let routeLengthMeters = 0;
+  let vehicleMarker = null;
+  let navigationMode = null;
+  let watchId = null;
+  let animationFrame = 0;
+  let demoStartedAt = 0;
+  let lastVehiclePosition = null;
 
   function setStatus(message, tone = "idle") {
     routeStatus.textContent = message;
     routeStatus.dataset.tone = tone;
+  }
+
+  function stripHtml(value) {
+    const element = document.createElement("div");
+    element.innerHTML = value || "";
+    return element.textContent || element.innerText || "Continue";
+  }
+
+  function escapeHtml(value) {
+    const element = document.createElement("div");
+    element.textContent = value || "";
+    return element.innerHTML;
+  }
+
+  function metersToMiles(meters) {
+    return meters / 1609.344;
+  }
+
+  function getSpherical() {
+    return google.maps.geometry?.spherical;
+  }
+
+  function getSegmentLength(from, to) {
+    return getSpherical()?.computeDistanceBetween(from, to) || 0;
+  }
+
+  function getPathLength(path) {
+    return path.reduce((total, point, index) => {
+      if (index === 0) {
+        return total;
+      }
+
+      return total + getSegmentLength(path[index - 1], point);
+    }, 0);
+  }
+
+  function getPathPointAtDistance(distanceMeters) {
+    if (!routePath.length) {
+      return null;
+    }
+
+    if (distanceMeters <= 0) {
+      return {
+        position: routePath[0],
+        heading: routePath[1] ? getHeading(routePath[0], routePath[1]) : 0,
+      };
+    }
+
+    let travelled = 0;
+
+    for (let index = 1; index < routePath.length; index += 1) {
+      const from = routePath[index - 1];
+      const to = routePath[index];
+      const segmentLength = getSegmentLength(from, to);
+
+      if (travelled + segmentLength >= distanceMeters) {
+        const fraction = segmentLength ? (distanceMeters - travelled) / segmentLength : 0;
+        return {
+          position: getSpherical().interpolate(from, to, fraction),
+          heading: getHeading(from, to),
+        };
+      }
+
+      travelled += segmentLength;
+    }
+
+    const last = routePath[routePath.length - 1];
+    const previous = routePath[routePath.length - 2] || last;
+    return {
+      position: last,
+      heading: getHeading(previous, last),
+    };
+  }
+
+  function getHeading(from, to) {
+    return getSpherical()?.computeHeading(from, to) || 0;
+  }
+
+  function getUpcomingStep(distanceMeters) {
+    if (!routeSteps.length) {
+      return "Follow the highlighted route";
+    }
+
+    const activeStep = routeSteps.find((step) => distanceMeters >= step.start && distanceMeters < step.end);
+    const nextStep = activeStep || routeSteps.find((step) => step.start > distanceMeters) || routeSteps[routeSteps.length - 1];
+    return nextStep.instruction;
+  }
+
+  function makeVehicleIcon(heading) {
+    return {
+      path: "M 0 -24 C 7 -22 11 -13 11 -3 L 14 12 C 14 17 10 20 5 20 L 3 26 L -3 26 L -5 20 C -10 20 -14 17 -14 12 L -11 -3 C -11 -13 -7 -22 0 -24 Z M -6 -4 L 6 -4 M -7 13 L 7 13",
+      fillColor: "#e73d33",
+      fillOpacity: 1,
+      strokeColor: "#050605",
+      strokeOpacity: 1,
+      strokeWeight: 2.5,
+      scale: 1,
+      rotation: heading,
+      anchor: new google.maps.Point(0, 0),
+    };
+  }
+
+  function setVehiclePosition(position, heading) {
+    if (!vehicleMarker) {
+      vehicleMarker = new google.maps.Marker({
+        map,
+        position,
+        clickable: false,
+        zIndex: 1000,
+        icon: makeVehicleIcon(heading),
+      });
+      return;
+    }
+
+    vehicleMarker.setPosition(position);
+    vehicleMarker.setIcon(makeVehicleIcon(heading));
+  }
+
+  function moveCamera(position, heading) {
+    const cameraCenter = getSpherical()?.computeOffset(position, 80, heading) || position;
+    const camera = {
+      center: cameraCenter,
+      heading,
+      tilt: 67.5,
+      zoom: 18,
+    };
+
+    if (typeof map.moveCamera === "function") {
+      map.moveCamera(camera);
+      return;
+    }
+
+    map.setCenter(camera.center);
+    map.setZoom(camera.zoom);
+    map.setHeading?.(camera.heading);
+    map.setTilt?.(45);
+  }
+
+  function updateNavigationHud(distanceMeters, modeLabel) {
+    const remaining = Math.max(routeLengthMeters - distanceMeters, 0);
+    navMode.textContent = modeLabel;
+    navInstruction.textContent = getUpcomingStep(distanceMeters);
+    navDetail.textContent = `${metersToMiles(remaining).toFixed(1)} mi remaining`;
+  }
+
+  function prepareRoute(result) {
+    currentRoute = result;
+    routePath = result.routes[0]?.overview_path || [];
+    routeLengthMeters = getPathLength(routePath);
+    let cursor = 0;
+
+    routeSteps = (result.routes[0]?.legs || []).flatMap((leg) => (
+      leg.steps || []
+    ).map((step) => {
+      const start = cursor;
+      const length = step.distance?.value || 0;
+      cursor += length;
+
+      return {
+        start,
+        end: cursor,
+        instruction: stripHtml(step.instructions),
+      };
+    }));
+
+    startDriveButton.disabled = !routePath.length;
+    demoDriveButton.disabled = !routePath.length;
+  }
+
+  function enterNavigation(modeLabel) {
+    if (!currentRoute || !routePath.length) {
+      setStatus("Route first, then start drive mode.", "error");
+      return false;
+    }
+
+    document.body.classList.add("is-driving");
+    navigationHud.hidden = false;
+    directionsPanel.hidden = true;
+    map.setOptions({
+      fullscreenControl: false,
+      mapTypeControl: false,
+      rotateControl: false,
+      streetViewControl: false,
+      tiltInteractionEnabled: true,
+      headingInteractionEnabled: true,
+    });
+    updateNavigationHud(0, modeLabel);
+    return true;
+  }
+
+  function stopNavigation() {
+    document.body.classList.remove("is-driving");
+    navigationHud.hidden = true;
+    navigationMode = null;
+    lastVehiclePosition = null;
+
+    if (watchId !== null && navigator.geolocation) {
+      navigator.geolocation.clearWatch(watchId);
+      watchId = null;
+    }
+
+    if (animationFrame) {
+      window.cancelAnimationFrame(animationFrame);
+      animationFrame = 0;
+    }
+
+    if (vehicleMarker) {
+      vehicleMarker.setMap(null);
+      vehicleMarker = null;
+    }
+
+    if (currentRoute) {
+      directionsPanel.hidden = false;
+    }
+
+    map.setTilt?.(0);
+    map.setHeading?.(0);
   }
 
   function parseCoordinates(value) {
@@ -166,7 +403,7 @@
           });
           const label = markerStyles[type]?.label || markerStyles.default.label;
           const infoWindow = new google.maps.InfoWindow({
-            content: `<strong>${place.name || label}</strong><br>${label}`,
+            content: `<strong>${escapeHtml(place.name || label)}</strong><br>${escapeHtml(label)}`,
           });
 
           marker.addListener("click", () => infoWindow.open({ anchor: marker, map }));
@@ -177,6 +414,10 @@
   }
 
   function queueBusinessRefresh() {
+    if (navigationMode) {
+      return;
+    }
+
     window.clearTimeout(businessTimer);
     businessTimer = window.setTimeout(refreshBusinesses, 500);
   }
@@ -221,10 +462,19 @@
     routeForm.hidden = false;
     directionsPanel.hidden = true;
 
-    map = window.createOpenWorldGameMap(document.querySelector("#map"), {
+    const mapOptions = {
       center: { lat: 32.4207, lng: -104.2288 },
       zoom: 12,
-    });
+      tilt: 45,
+      heading: 0,
+    };
+
+    if (configuredMapId) {
+      mapOptions.mapId = configuredMapId;
+      mapOptions.styles = undefined;
+    }
+
+    map = window.createOpenWorldGameMap(document.querySelector("#map"), mapOptions);
     autocompleteBounds = new google.maps.LatLngBounds(
       { lat: 32.05, lng: -104.65 },
       { lat: 32.8, lng: -103.85 },
@@ -261,6 +511,8 @@
     map.addListener("idle", queueBusinessRefresh);
     directionsRenderer.addListener("directions_changed", updateRouteSummary);
 
+    startDriveButton.disabled = true;
+    demoDriveButton.disabled = true;
     refreshBusinesses();
     setStatus("Start typing an address or coordinates.", "idle");
   }
@@ -282,7 +534,7 @@
 
     const script = document.createElement("script");
     script.id = "google-maps-js";
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(trimmedKey)}&loading=async&libraries=places&callback=initOpenWorldMap`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(trimmedKey)}&loading=async&libraries=places,geometry&callback=initOpenWorldMap`;
     script.async = true;
     script.onerror = () => showManualKeyEntry("Could not load Google Maps. Check the API key and network connection.");
     document.head.appendChild(script);
@@ -305,6 +557,126 @@
     setStatus(`${miles.toFixed(1)} mi, about ${minutes} min.`, "success");
   }
 
+  function estimateDistanceAlongRoute(position) {
+    if (!routePath.length) {
+      return 0;
+    }
+
+    let nearestDistance = 0;
+    let nearestScore = Number.POSITIVE_INFINITY;
+    let travelled = 0;
+
+    routePath.forEach((point, index) => {
+      if (index > 0) {
+        travelled += getSegmentLength(routePath[index - 1], point);
+      }
+
+      const score = getSegmentLength(position, point);
+
+      if (score < nearestScore) {
+        nearestScore = score;
+        nearestDistance = travelled;
+      }
+    });
+
+    return nearestDistance;
+  }
+
+  function updateLivePosition(coords) {
+    const position = new google.maps.LatLng(coords.latitude, coords.longitude);
+    let heading = Number.isFinite(coords.heading) ? coords.heading : null;
+
+    if (heading === null && lastVehiclePosition) {
+      heading = getHeading(lastVehiclePosition, position);
+    }
+
+    if (heading === null) {
+      const estimatedDistance = estimateDistanceAlongRoute(position);
+      heading = getPathPointAtDistance(estimatedDistance)?.heading || 0;
+    }
+
+    const distanceAlongRoute = estimateDistanceAlongRoute(position);
+    lastVehiclePosition = position;
+    setVehiclePosition(position, heading);
+    moveCamera(position, heading);
+    updateNavigationHud(distanceAlongRoute, "Live GPS");
+  }
+
+  function startLiveDrive() {
+    stopNavigation();
+
+    if (!enterNavigation("Live GPS")) {
+      return;
+    }
+
+    navigationMode = "live";
+
+    if (!navigator.geolocation) {
+      setStatus("GPS is not available here. Running preview drive.", "error");
+      startDemoDrive();
+      return;
+    }
+
+    watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        updateLivePosition(position.coords);
+        setStatus("Live drive mode active.", "success");
+      },
+      () => {
+        setStatus("Location permission was blocked. Running preview drive.", "error");
+        startDemoDrive();
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 1000,
+        timeout: 10000,
+      },
+    );
+  }
+
+  function tickDemoDrive(timestamp) {
+    if (navigationMode !== "demo" || !routeLengthMeters) {
+      return;
+    }
+
+    if (!demoStartedAt) {
+      demoStartedAt = timestamp;
+    }
+
+    const elapsedSeconds = (timestamp - demoStartedAt) / 1000;
+    const metersPerSecond = 12.5;
+    const distance = Math.min(elapsedSeconds * metersPerSecond, routeLengthMeters);
+    const routePoint = getPathPointAtDistance(distance);
+
+    if (!routePoint) {
+      return;
+    }
+
+    setVehiclePosition(routePoint.position, routePoint.heading);
+    moveCamera(routePoint.position, routePoint.heading);
+    updateNavigationHud(distance, "Preview Drive");
+
+    if (distance >= routeLengthMeters) {
+      setStatus("Arrived.", "success");
+      return;
+    }
+
+    animationFrame = window.requestAnimationFrame(tickDemoDrive);
+  }
+
+  function startDemoDrive() {
+    stopNavigation();
+
+    if (!enterNavigation("Preview Drive")) {
+      return;
+    }
+
+    navigationMode = "demo";
+    demoStartedAt = 0;
+    setStatus("Preview drive mode active.", "success");
+    animationFrame = window.requestAnimationFrame(tickDemoDrive);
+  }
+
   function route() {
     const origin = originInput.value.trim();
     const destination = destinationInput.value.trim();
@@ -320,6 +692,9 @@
     }
 
     hasSubmittedRoute = true;
+    stopNavigation();
+    startDriveButton.disabled = true;
+    demoDriveButton.disabled = true;
     setStatus("Finding route...", "working");
     directionsService.route(
       {
@@ -330,11 +705,16 @@
       (result, status) => {
         if (status !== "OK" || !result) {
           directionsPanel.hidden = true;
+          currentRoute = null;
+          routePath = [];
+          routeSteps = [];
+          routeLengthMeters = 0;
           setStatus(`Route failed: ${status.replaceAll("_", " ").toLowerCase()}.`, "error");
           return;
         }
 
         directionsRenderer.setDirections(result);
+        prepareRoute(result);
         updateRouteSummary();
       },
     );
@@ -371,6 +751,10 @@
       route();
     }
   });
+
+  startDriveButton.addEventListener("click", startLiveDrive);
+  demoDriveButton.addEventListener("click", startDemoDrive);
+  stopNavigationButton.addEventListener("click", stopNavigation);
 
   keyForm.addEventListener("submit", (event) => {
     event.preventDefault();
