@@ -31,6 +31,18 @@
   const useVectorMapId = Boolean(configuredMapId)
     && !forceFlatMap
     && (forceVectorMap || vectorPreference !== false);
+  const routeLineStyle = {
+    normal: {
+      strokeColor: "#f5d77d",
+      strokeOpacity: 0.95,
+      strokeWeight: 6,
+    },
+    navigation: {
+      strokeColor: "#00a8ff",
+      strokeOpacity: 1,
+      strokeWeight: 8,
+    },
+  };
   const businessTypes = [
     "restaurant",
     "gas_station",
@@ -377,6 +389,12 @@
     navDetail.textContent = `${metersToMiles(remaining).toFixed(1)} mi remaining`;
   }
 
+  function setRouteLineStyle(mode = "normal") {
+    directionsRenderer?.setOptions({
+      polylineOptions: routeLineStyle[mode] || routeLineStyle.normal,
+    });
+  }
+
   function prepareRoute(result) {
     currentRoute = result;
     routePath = result.routes[0]?.overview_path || [];
@@ -413,6 +431,7 @@
       tilt: 67.5,
       heading: map?.getHeading?.() || 0,
     });
+    setRouteLineStyle("navigation");
     document.body.classList.add("is-driving");
     navigationHud.hidden = false;
     directionsPanel.hidden = true;
@@ -460,6 +479,7 @@
     }
 
     if (wasNavigating) {
+      setRouteLineStyle("normal");
       switchRouteMapMode(useVectorMapId, {
         tilt: useVectorMapId ? 67.5 : 45,
         zoom: useVectorMapId ? Math.max(map?.getZoom?.() || 18, 18) : map?.getZoom?.() || 12,
@@ -771,11 +791,7 @@
       panel: directionsPanel,
       preserveViewport: false,
       suppressMarkers: false,
-      polylineOptions: {
-        strokeColor: "#f5d77d",
-        strokeOpacity: 0.95,
-        strokeWeight: 6,
-      },
+      polylineOptions: routeLineStyle.normal,
     });
     originAutocomplete = setupAutocomplete(originInput, (place) => {
       originPlace = place;
