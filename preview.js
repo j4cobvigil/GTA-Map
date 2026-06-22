@@ -211,7 +211,7 @@
             <stop offset="0.28" stop-color="#9ee7f1"/>
             <stop offset="0.68" stop-color="#26616e"/>
             <stop offset="1" stop-color="#071519"/>
-          </linearGradient>
+          </radialGradient>
           <linearGradient id="saucer" x1="15" x2="83" y1="46" y2="83" gradientUnits="userSpaceOnUse">
             <stop offset="0" stop-color="#ffffff"/>
             <stop offset="0.16" stop-color="#8f9da0"/>
@@ -280,6 +280,7 @@
         map,
         position,
         clickable: false,
+        optimized: false,
         zIndex: 1000,
         icon: makeVehicleIcon(heading),
       });
@@ -288,6 +289,17 @@
 
     vehicleMarker.setPosition(position);
     vehicleMarker.setIcon(makeVehicleIcon(heading));
+  }
+
+  function showVehicleAtRouteStart() {
+    const routePoint = getPathPointAtDistance(0);
+
+    if (!routePoint) {
+      return;
+    }
+
+    setVehiclePosition(routePoint.position, routePoint.heading);
+    moveCamera(routePoint.position, routePoint.heading);
   }
 
   function startVehicleLights() {
@@ -388,6 +400,7 @@
       headingInteractionEnabled: true,
     });
     updateNavigationHud(0, modeLabel);
+    showVehicleAtRouteStart();
     startVehicleLights();
     return true;
   }
