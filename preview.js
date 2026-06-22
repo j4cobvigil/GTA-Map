@@ -24,6 +24,8 @@
   const configuredMapId = typeof window.GOOGLE_MAPS_MAP_ID === "string"
     ? window.GOOGLE_MAPS_MAP_ID.trim()
     : "";
+  const useVectorMapId = window.GOOGLE_MAPS_USE_VECTOR_MAP_ID === true
+    || params.get("vector") === "1";
   const businessTypes = [
     "restaurant",
     "gas_station",
@@ -65,6 +67,7 @@
   let animationFrame = 0;
   let demoStartedAt = 0;
   let lastVehiclePosition = null;
+  let currentLocationCache = null;
 
   function setStatus(message, tone = "idle") {
     routeStatus.textContent = message;
@@ -323,6 +326,48 @@
     return value.trim();
   }
 
+  function getCurrentLocation() {
+    return new Promise((resolve, reject) => {
+      if (currentLocationCache && Date.now() - currentLocationCache.timestamp < 30000) {
+        resolve(currentLocationCache.location);
+        return;
+      }
+
+      if (!navigator.geolocation) {
+        reject(new Error("GPS is not available in this browser."));
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          currentLocationCache = {
+            timestamp: Date.now(),
+            location: {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+            },
+          };
+          resolve(currentLocationCache.location);
+        },
+        () => reject(new Error("Location permission was blocked.")),
+        {
+          enableHighAccuracy: true,
+          maximumAge: 10000,
+          timeout: 12000,
+        },
+      );
+    });
+  }
+
+  async function resolveOrigin(origin) {
+    if (origin) {
+      return parsePlace(origin, originPlace);
+    }
+
+    setStatus("Getting your current location...", "working");
+    return getCurrentLocation();
+  }
+
   function makeBusinessIcon(type) {
     const style = markerStyles[type] || markerStyles.default;
     const svg = `
@@ -469,7 +514,7 @@
       heading: 0,
     };
 
-    if (configuredMapId) {
+    if (configuredMapId && useVectorMapId) {
       mapOptions.mapId = configuredMapId;
       mapOptions.styles = undefined;
     }
@@ -514,7 +559,7 @@
     startDriveButton.disabled = true;
     demoDriveButton.disabled = true;
     refreshBusinesses();
-    setStatus("Start typing an address or coordinates.", "idle");
+    setStatus("Enter a destination. Start is your current location by default.", "idle");
   }
 
   function showManualKeyEntry(message = "Map key missing. Paste the key once, or deploy with the GitHub Actions variable.") {
@@ -677,7 +722,7 @@
     animationFrame = window.requestAnimationFrame(tickDemoDrive);
   }
 
-  function route() {
+  async function route() {
     const origin = originInput.value.trim();
     const destination = destinationInput.value.trim();
 
@@ -686,19 +731,28 @@
       return;
     }
 
-    if (!origin || !destination) {
-      setStatus("Enter both a start and destination.", "error");
+    if (!destination) {
+      setStatus("Enter a destination. Leave Start blank to use current location.", "error");
       return;
     }
 
     hasSubmittedRoute = true;
+    let resolvedOrigin;
+
+    try {
+      resolvedOrigin = await resolveOrigin(origin);
+    } catch (error) {
+      setStatus(`${error.message} Type a start address instead.`, "error");
+      return;
+    }
+
     stopNavigation();
     startDriveButton.disabled = true;
     demoDriveButton.disabled = true;
     setStatus("Finding route...", "working");
     directionsService.route(
       {
-        origin: parsePlace(origin, originPlace),
+        origin: resolvedOrigin,
         destination: parsePlace(destination, destinationPlace),
         travelMode: google.maps.TravelMode[travelModeSelect.value] || google.maps.TravelMode.DRIVING,
       },
@@ -747,7 +801,7 @@
     originPlace = destinationPlace;
     destinationPlace = selectedOrigin;
 
-    if (originInput.value.trim() && destinationInput.value.trim()) {
+    if (destinationInput.value.trim()) {
       route();
     }
   });

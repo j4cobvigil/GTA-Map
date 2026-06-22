@@ -6,7 +6,7 @@ This is an original Google Maps JavaScript API route map inspired by open-world 
 
 - `open-world-game-map-style.json` is the reusable Google Maps style array.
 - `open-world-game-map-style.js` exposes `openWorldGameMapStyle`, `openWorldGameMapOptions`, and `createOpenWorldGameMap(...)`.
-- `index.html` is the route map page. It accepts addresses or latitude/longitude pairs for directions, with Places autocomplete when enabled.
+- `index.html` is the route map page. It accepts addresses or latitude/longitude pairs for directions, with Places autocomplete when enabled. If the Start field is blank, it uses the browser's current location.
 - After routing, `Start Drive` enters a tilted chase-camera navigation mode using live browser GPS when permission is granted. `Preview Drive` animates the vehicle along the route without GPS.
 - `config.js` is a blank committed runtime config. GitHub Actions overwrites it during Pages deployment.
 - `serve-preview.cjs` starts a small localhost preview server.
@@ -43,7 +43,7 @@ Autocomplete and nearby business icons use the Places library. In Google Cloud, 
 
 Live GPS navigation requires HTTPS and browser location permission. GitHub Pages is HTTPS, so the phone will prompt for location access when `Start Drive` is tapped. The web app can simulate the Google Maps app navigation feel, but it is still browser-based and does not have the full native Google Maps turn-by-turn navigation SDK.
 
-For the most convincing 3D chase camera, create a vector Map ID in Google Cloud and add it as the optional `GOOGLE_MAPS_MAP_ID` Actions variable. Without a Map ID, the app still follows the route and tilts the camera where the browser/API allows it.
+The GTA-inspired local JSON style is the default. A plain vector Map ID uses Google Cloud styling and can make the map look like regular Google Maps again. If you want to test vector mode anyway, open the site with `?vector=1` or add an Actions variable named `GOOGLE_MAPS_USE_VECTOR_MAP_ID` with the value `true`. For the best of both worlds, customize the Map ID in Google Cloud to match the same dark green, cream-road style before enabling vector mode.
 
 ## Preview
 

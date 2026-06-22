@@ -166,15 +166,20 @@ const openWorldGameMapOptions = {
 };
 
 function createOpenWorldGameMap(element, options = {}) {
-  const styles = Object.prototype.hasOwnProperty.call(options, "styles")
-    ? options.styles
-    : openWorldGameMapStyle;
-
-  return new google.maps.Map(element, {
+  const mapOptions = {
     ...openWorldGameMapOptions,
     ...options,
-    styles,
-  });
+  };
+  const hasExplicitStyles = Object.prototype.hasOwnProperty.call(options, "styles")
+    && options.styles !== undefined;
+
+  if (options.mapId && !hasExplicitStyles) {
+    delete mapOptions.styles;
+  } else {
+    mapOptions.styles = hasExplicitStyles ? options.styles : openWorldGameMapStyle;
+  }
+
+  return new google.maps.Map(element, mapOptions);
 }
 
 window.openWorldGameMapStyle = openWorldGameMapStyle;
