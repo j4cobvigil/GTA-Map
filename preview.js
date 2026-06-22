@@ -68,6 +68,7 @@
   let demoStartedAt = 0;
   let lastVehiclePosition = null;
   let currentLocationCache = null;
+  const vehicleIconCache = new Map();
 
   function setStatus(message, tone = "idle") {
     routeStatus.textContent = message;
@@ -161,16 +162,76 @@
   }
 
   function makeVehicleIcon(heading) {
+    const normalizedHeading = Math.round((((heading % 360) + 360) % 360) / 5) * 5;
+    const cachedIcon = vehicleIconCache.get(normalizedHeading);
+
+    if (cachedIcon) {
+      return cachedIcon;
+    }
+
+    const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 120">
+        <defs>
+          <linearGradient id="paint" x1="18" x2="78" y1="18" y2="104" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#ff5a47"/>
+            <stop offset="0.45" stop-color="#b81919"/>
+            <stop offset="1" stop-color="#5a0707"/>
+          </linearGradient>
+          <linearGradient id="hood" x1="27" x2="69" y1="9" y2="44" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#ff8a74"/>
+            <stop offset="1" stop-color="#851111"/>
+          </linearGradient>
+          <linearGradient id="glass" x1="29" x2="67" y1="28" y2="58" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#d8ffff"/>
+            <stop offset="0.45" stop-color="#5ba5ad"/>
+            <stop offset="1" stop-color="#102b33"/>
+          </linearGradient>
+          <radialGradient id="chrome" cx="50%" cy="45%" r="58%">
+            <stop offset="0" stop-color="#ffffff"/>
+            <stop offset="0.28" stop-color="#d8e2e4"/>
+            <stop offset="0.55" stop-color="#7b898c"/>
+            <stop offset="0.82" stop-color="#f4f7f7"/>
+            <stop offset="1" stop-color="#41494c"/>
+          </radialGradient>
+          <filter id="shadow" x="-25%" y="-20%" width="150%" height="150%">
+            <feDropShadow dx="0" dy="5" stdDeviation="4" flood-color="#050605" flood-opacity="0.75"/>
+          </filter>
+        </defs>
+        <g transform="rotate(${normalizedHeading} 48 60)" filter="url(#shadow)">
+          <path d="M18 39 C19 23 29 11 48 8 C67 11 77 23 78 39 L84 91 C85 102 77 110 65 110 H31 C19 110 11 102 12 91 Z" fill="#050605"/>
+          <path d="M22 40 C23 26 32 15 48 12 C64 15 73 26 74 40 L79 91 C80 98 75 104 66 104 H30 C21 104 16 98 17 91 Z" fill="url(#paint)"/>
+          <path d="M31 21 C35 15 41 12 48 11 C55 12 61 15 65 21 L70 42 H26 Z" fill="url(#hood)"/>
+          <path d="M30 47 L66 47 L71 70 C65 74 56 76 48 76 C40 76 31 74 25 70 Z" fill="#280b0b" opacity="0.72"/>
+          <path d="M32 45 C35 35 40 29 48 28 C56 29 61 35 64 45 L60 58 H36 Z" fill="url(#glass)" stroke="#050605" stroke-width="2"/>
+          <path d="M25 73 C31 80 39 84 48 84 C57 84 65 80 71 73 L73 96 C68 100 59 102 48 102 C37 102 28 100 23 96 Z" fill="#661010"/>
+          <path d="M29 77 L38 83 M67 77 L58 83 M32 96 H64" fill="none" stroke="#ff7a5e" stroke-width="3" stroke-linecap="round"/>
+          <path d="M21 43 H12 L13 84 H21 Z M75 43 H84 L83 84 H75 Z" fill="#0d0d0c"/>
+          <circle cx="18" cy="48" r="8" fill="#050605"/>
+          <circle cx="18" cy="48" r="5" fill="url(#chrome)"/>
+          <circle cx="18" cy="82" r="8" fill="#050605"/>
+          <circle cx="18" cy="82" r="5" fill="url(#chrome)"/>
+          <circle cx="78" cy="48" r="8" fill="#050605"/>
+          <circle cx="78" cy="48" r="5" fill="url(#chrome)"/>
+          <circle cx="78" cy="82" r="8" fill="#050605"/>
+          <circle cx="78" cy="82" r="5" fill="url(#chrome)"/>
+          <circle cx="18" cy="48" r="2" fill="#f7ffff"/>
+          <circle cx="18" cy="82" r="2" fill="#f7ffff"/>
+          <circle cx="78" cy="48" r="2" fill="#f7ffff"/>
+          <circle cx="78" cy="82" r="2" fill="#f7ffff"/>
+          <path d="M27 27 L35 19 M61 19 L69 27" stroke="#f6d77b" stroke-width="3" stroke-linecap="round"/>
+          <path d="M36 15 C43 10 53 10 60 15" fill="none" stroke="#ffb4a2" stroke-width="2" opacity="0.75"/>
+        </g>
+      </svg>
+    `.trim();
+    const icon = {
+      url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
+      scaledSize: new google.maps.Size(54, 68),
+      anchor: new google.maps.Point(27, 34),
+    };
+
+    vehicleIconCache.set(normalizedHeading, icon);
     return {
-      path: "M 0 -24 C 7 -22 11 -13 11 -3 L 14 12 C 14 17 10 20 5 20 L 3 26 L -3 26 L -5 20 C -10 20 -14 17 -14 12 L -11 -3 C -11 -13 -7 -22 0 -24 Z M -6 -4 L 6 -4 M -7 13 L 7 13",
-      fillColor: "#e73d33",
-      fillOpacity: 1,
-      strokeColor: "#050605",
-      strokeOpacity: 1,
-      strokeWeight: 2.5,
-      scale: 1,
-      rotation: heading,
-      anchor: new google.maps.Point(0, 0),
+      ...icon,
     };
   }
 
