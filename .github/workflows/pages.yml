@@ -32,10 +32,11 @@ jobs:
       - name: Prepare Pages artifact
         env:
           GOOGLE_MAPS_API_KEY: ${{ vars.GOOGLE_MAPS_API_KEY }}
+          GOOGLE_MAPS_MAP_ID: ${{ vars.GOOGLE_MAPS_MAP_ID }}
         run: |
           mkdir -p dist
           cp index.html styles.css preview.js open-world-game-map-style.js open-world-game-map-style.json dist/
-          node -e "const fs = require('node:fs'); const key = process.env.GOOGLE_MAPS_API_KEY || ''; fs.writeFileSync('dist/config.js', 'window.GOOGLE_MAPS_API_KEY = ' + JSON.stringify(key) + ';\\n');"
+          node -e "const fs = require('node:fs'); const key = process.env.GOOGLE_MAPS_API_KEY || ''; const mapId = process.env.GOOGLE_MAPS_MAP_ID || ''; fs.writeFileSync('dist/config.js', 'window.GOOGLE_MAPS_API_KEY = ' + JSON.stringify(key) + ';\\nwindow.GOOGLE_MAPS_MAP_ID = ' + JSON.stringify(mapId) + ';\\n');"
           touch dist/.nojekyll
 
       - name: Upload Pages artifact
