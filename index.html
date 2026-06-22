@@ -4,16 +4,32 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Open World Google Maps Skin</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=2">
   </head>
   <body>
     <main class="shell">
-      <section class="toolbar" aria-label="Map controls">
+      <section class="toolbar route-panel" aria-label="Map controls">
         <div>
-          <h1>Open World Map Skin</h1>
-          <p>Google Maps JavaScript API style preview</p>
+          <h1>Open World Route Map</h1>
+          <p id="route-status">Enter a start and destination.</p>
         </div>
-        <form id="key-form" class="key-form">
+        <form id="route-form" class="route-form" hidden>
+          <label for="origin">Start</label>
+          <input id="origin" name="origin" autocomplete="street-address" placeholder="Address or 32.42, -104.23">
+          <label for="destination">Destination</label>
+          <input id="destination" name="destination" autocomplete="street-address" placeholder="Address or coordinates">
+          <div class="route-actions">
+            <select id="travel-mode" name="travel-mode" aria-label="Travel mode">
+              <option value="DRIVING">Driving</option>
+              <option value="WALKING">Walking</option>
+              <option value="BICYCLING">Bicycling</option>
+              <option value="TRANSIT">Transit</option>
+            </select>
+            <button id="swap-route" type="button">Swap</button>
+            <button type="submit">Route</button>
+          </div>
+        </form>
+        <form id="key-form" class="key-form" hidden>
           <label for="api-key">API key</label>
           <input id="api-key" name="api-key" type="password" autocomplete="off" placeholder="AIza...">
           <button type="submit">Load Map</button>
@@ -28,8 +44,8 @@
         </div>
       </section>
     </main>
-    <script src="open-world-game-map-style.js"></script>
-    <script src="config.js"></script>
-    <script src="preview.js"></script>
+    <script src="open-world-game-map-style.js?v=2"></script>
+    <script src="config.js?v=2"></script>
+    <script src="preview.js?v=2"></script>
   </body>
 </html>

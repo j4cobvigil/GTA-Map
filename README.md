@@ -1,12 +1,12 @@
 # Open World Google Maps Skin
 
-This is an original Google Maps JavaScript API skin inspired by open-world crime game maps: high-contrast cream roads, dark outlines, muted green terrain, teal water, reduced icon clutter, and strong label strokes.
+This is an original Google Maps JavaScript API route map inspired by open-world crime game maps: high-contrast cream roads, dark outlines, muted green terrain, teal water, reduced icon clutter, and strong label strokes.
 
 ## Files
 
 - `open-world-game-map-style.json` is the reusable Google Maps style array.
 - `open-world-game-map-style.js` exposes `openWorldGameMapStyle`, `openWorldGameMapOptions`, and `createOpenWorldGameMap(...)`.
-- `index.html` is a local preview page. Open it in a browser and enter a Google Maps JavaScript API key, or append `?key=YOUR_API_KEY` to the URL.
+- `index.html` is the route map page. It accepts addresses or latitude/longitude pairs for directions.
 - `config.js` is a blank committed runtime config. GitHub Actions overwrites it during Pages deployment.
 - `serve-preview.cjs` starts a small localhost preview server.
 
@@ -32,13 +32,15 @@ After deployment, the site should be available at:
 https://j4cobvigil.github.io/GTA-Map/
 ```
 
+If the deployed page still asks for an API key, GitHub Pages is probably serving the committed blank `config.js`. Check that Settings -> Pages is set to GitHub Actions, confirm the `GOOGLE_MAPS_API_KEY` repository variable exists, then rerun the Pages workflow.
+
 ## Preview
 
 ```bash
 node serve-preview.cjs
 ```
 
-Then open `http://127.0.0.1:5189/` and enter a Google Maps JavaScript API key.
+Then open `http://127.0.0.1:5189/` and enter a Google Maps JavaScript API key. If your key is restricted only to `https://j4cobvigil.github.io/GTA-Map/*`, it will not work on localhost.
 
 ## Drop-In Usage
 

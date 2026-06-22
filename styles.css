@@ -15,6 +15,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 html,
 body,
 .shell {
@@ -39,12 +43,9 @@ body {
   z-index: 2;
   top: 16px;
   left: 16px;
-  right: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  max-width: 980px;
+  display: grid;
+  gap: 12px;
+  width: min(430px, calc(100% - 32px));
   padding: 12px;
   background: color-mix(in srgb, var(--panel) 92%, transparent);
   border: 1px solid #34392b;
@@ -68,28 +69,53 @@ body {
   font-size: 13px;
 }
 
-.key-form {
+.toolbar p[data-tone="error"] {
+  color: #ffb7a8;
+}
+
+.toolbar p[data-tone="success"] {
+  color: #c8db9b;
+}
+
+.toolbar p[data-tone="working"] {
+  color: var(--accent);
+}
+
+.key-form,
+.route-form {
   display: grid;
-  grid-template-columns: auto minmax(180px, 300px) auto;
-  align-items: center;
   gap: 8px;
 }
 
-.key-form label {
+.key-form {
+  grid-template-columns: 1fr auto;
+}
+
+.key-form label,
+.route-form label {
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
 }
 
+.key-form label {
+  grid-column: 1 / -1;
+}
+
 .key-form input,
-.key-form button {
+.key-form button,
+.route-form input,
+.route-form button,
+.route-form select {
   height: 40px;
   border-radius: 6px;
   font: inherit;
 }
 
-.key-form input {
+.key-form input,
+.route-form input,
+.route-form select {
   width: 100%;
   min-width: 0;
   color: var(--paper);
@@ -98,13 +124,20 @@ body {
   padding: 0 10px;
 }
 
-.key-form button {
+.key-form button,
+.route-form button {
   border: 0;
   color: var(--ink);
   background: var(--accent);
   padding: 0 14px;
   font-weight: 800;
   cursor: pointer;
+}
+
+.route-actions {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
 }
 
 .map-surface {
@@ -180,15 +213,16 @@ body {
 
 @media (max-width: 720px) {
   .toolbar {
-    align-items: stretch;
-    flex-direction: column;
+    top: 12px;
+    left: 12px;
+    width: calc(100% - 24px);
   }
 
-  .key-form {
-    grid-template-columns: 1fr auto;
+  .route-actions {
+    grid-template-columns: 1fr 1fr;
   }
 
-  .key-form label {
+  .route-actions select {
     grid-column: 1 / -1;
   }
 }
