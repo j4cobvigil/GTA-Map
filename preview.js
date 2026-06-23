@@ -1,4 +1,5 @@
 (function () {
+  const routePanel = document.querySelector(".route-panel");
   const routeForm = document.querySelector("#route-form");
   const routeStatus = document.querySelector("#route-status");
   const originInput = document.querySelector("#origin");
@@ -16,6 +17,7 @@
   const navInstruction = document.querySelector("#nav-instruction");
   const navDetail = document.querySelector("#nav-detail");
   const stopNavigationButton = document.querySelector("#stop-navigation");
+  const toggleRoutePanelButton = document.querySelector("#toggle-route-panel");
   const keyForm = document.querySelector("#key-form");
   const keyInput = document.querySelector("#api-key");
   const mapElement = document.querySelector("#map");
@@ -100,6 +102,7 @@
   let businessMarkers = [];
   let sideMissionMarkers = [];
   let sideMissionPlaces = [];
+  const routeTargets = new Map();
   let hasSubmittedRoute = false;
   let routeTimer = 0;
   let businessTimer = 0;
@@ -130,6 +133,21 @@
     routeStatus.dataset.tone = tone;
   }
 
+  function setRoutePanelMinimized(isMinimized) {
+    routePanel?.classList.toggle("is-minimized", isMinimized);
+
+    if (!toggleRoutePanelButton) {
+      return;
+    }
+
+    toggleRoutePanelButton.textContent = isMinimized ? "+" : "-";
+    toggleRoutePanelButton.setAttribute("aria-expanded", String(!isMinimized));
+    toggleRoutePanelButton.setAttribute(
+      "aria-label",
+      isMinimized ? "Restore route panel" : "Minimize route panel",
+    );
+  }
+
   function stripHtml(value) {
     const element = document.createElement("div");
     element.innerHTML = value || "";
@@ -140,6 +158,78 @@
     const element = document.createElement("div");
     element.textContent = value || "";
     return element.innerHTML;
+  }
+
+  function getLocationText(location) {
+    if (!location) {
+      return "";
+    }
+
+    return `${location.lat().toFixed(6)}, ${location.lng().toFixed(6)}`;
+  }
+
+  function getRouteTargetId(prefix, name, location, placeId = "") {
+    if (placeId) {
+      return `${prefix}:${placeId}`;
+    }
+
+    return `${prefix}:${name || "location"}:${getLocationText(location)}`;
+  }
+
+  function registerRouteTarget(target) {
+    routeTargets.set(target.id, target);
+    return target.id;
+  }
+
+  function registerPlaceRouteTarget(prefix, place, label = "Destination") {
+    const location = place.geometry?.location;
+    const name = place.name || label;
+    const id = getRouteTargetId(prefix, name, location, place.place_id || "");
+
+    return registerRouteTarget({
+      id,
+      name,
+      formattedAddress: place.formatted_address || place.vicinity || name,
+      placeId: place.place_id || "",
+      location,
+    });
+  }
+
+  function makeRouteInfoContent(title, detail, targetId) {
+    return `
+      <div class="map-info-window">
+        <strong>${escapeHtml(title)}</strong>
+        ${detail ? `<span>${escapeHtml(detail)}</span>` : ""}
+        <button class="map-route-button" type="button" data-route-target="${escapeHtml(targetId)}">Route</button>
+      </div>
+    `;
+  }
+
+  function routeToTarget(targetId) {
+    const target = routeTargets.get(targetId);
+
+    if (!target) {
+      return;
+    }
+
+    if (target.placeId) {
+      destinationPlace = {
+        place_id: target.placeId,
+        name: target.name,
+        formatted_address: target.formattedAddress || target.name,
+      };
+      destinationInput.value = target.name;
+    } else {
+      destinationPlace = null;
+      destinationInput.value = getLocationText(target.location) || target.name;
+    }
+
+    if (target.location && map) {
+      map.panTo(target.location);
+    }
+
+    setRoutePanelMinimized(false);
+    route();
   }
 
   function metersToMiles(meters) {
@@ -515,9 +605,16 @@
       icon: makeCompletedDestinationIcon(),
       zIndex: 2200,
     });
+    const targetId = registerRouteTarget({
+      id: getRouteTargetId("completed", destination.title || "Destination", destination.location),
+      name: destination.title || "Destination",
+      formattedAddress: destination.title || "Destination",
+      placeId: "",
+      location: destination.location,
+    });
 
     const infoWindow = new google.maps.InfoWindow({
-      content: `<strong>Destination complete</strong><br>${escapeHtml(destination.title || "Arrived")}`,
+      content: makeRouteInfoContent("Destination complete", destination.title || "Arrived", targetId),
     });
 
     completedDestinationMarker.addListener("click", () => infoWindow.open({
@@ -969,6 +1066,7 @@
 
   function addSideMission(place, origin) {
     const mission = normalizeSideMission(place, origin);
+    mission.routeTargetId = registerPlaceRouteTarget("side", place, mission.label);
     const marker = new google.maps.Marker({
       map,
       position: place.geometry.location,
@@ -977,9 +1075,13 @@
       zIndex: 700,
     });
     const distance = formatMissionDistance(mission.distanceMeters);
-    const rating = mission.rating ? `<br>${mission.rating.toFixed(1)} stars` : "";
+    const rating = mission.rating ? ` / ${mission.rating.toFixed(1)} stars` : "";
     const infoWindow = new google.maps.InfoWindow({
-      content: `<strong>Side Mission</strong><br>${escapeHtml(place.name || mission.label)}<br>${escapeHtml(mission.label)} / ${escapeHtml(distance)}${rating}`,
+      content: makeRouteInfoContent(
+        "Side Mission",
+        `${place.name || mission.label} / ${mission.label} / ${distance}${rating}`,
+        mission.routeTargetId,
+      ),
     });
 
     marker.sideMissionId = mission.id;
@@ -1018,15 +1120,8 @@
       return;
     }
 
-    const place = mission.place;
-    destinationPlace = {
-      place_id: place.place_id,
-      name: place.name,
-      formatted_address: place.vicinity || place.name,
-    };
-    destinationInput.value = place.name || place.vicinity || "";
     focusSideMission(id);
-    route();
+    routeToTarget(mission.routeTargetId);
   }
 
   function getCurrentMapCamera(useVectorMap) {
@@ -1170,6 +1265,7 @@
 
         places.forEach((place) => {
           const type = getPrimaryBusinessType(place);
+          const targetId = registerPlaceRouteTarget("business", place, markerStyles[type]?.label || "Location");
           const marker = new google.maps.Marker({
             map,
             position: place.geometry.location,
@@ -1178,7 +1274,7 @@
           });
           const label = markerStyles[type]?.label || markerStyles.default.label;
           const infoWindow = new google.maps.InfoWindow({
-            content: `<strong>${escapeHtml(place.name || label)}</strong><br>${escapeHtml(label)}`,
+            content: makeRouteInfoContent(place.name || label, label, targetId),
           });
 
           marker.addListener("click", () => infoWindow.open({ anchor: marker, map }));
@@ -1309,6 +1405,7 @@
   }
 
   function showManualKeyEntry(message = "Map key missing. Paste the key once, or deploy with the GitHub Actions variable.") {
+    setRoutePanelMinimized(false);
     keyForm.hidden = false;
     routeForm.hidden = true;
     directionsPanel.hidden = true;
@@ -1559,6 +1656,20 @@
   startDriveButton.addEventListener("click", startLiveDrive);
   demoDriveButton.addEventListener("click", startDemoDrive);
   stopNavigationButton.addEventListener("click", stopNavigation);
+  toggleRoutePanelButton?.addEventListener("click", () => {
+    setRoutePanelMinimized(!routePanel?.classList.contains("is-minimized"));
+  });
+
+  document.addEventListener("click", (event) => {
+    const routeButton = event.target.closest("[data-route-target]");
+
+    if (!routeButton) {
+      return;
+    }
+
+    event.preventDefault();
+    routeToTarget(routeButton.dataset.routeTarget);
+  });
 
   sideMissionsList?.addEventListener("click", (event) => {
     const routeButton = event.target.closest("[data-side-mission-route]");

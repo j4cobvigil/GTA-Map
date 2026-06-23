@@ -4,14 +4,15 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Open World Google Maps Skin</title>
-    <link rel="stylesheet" href="styles.css?v=7">
+    <link rel="stylesheet" href="styles.css?v=9">
   </head>
   <body>
     <main class="shell">
       <section class="toolbar route-panel" aria-label="Map controls">
-        <div>
+        <div class="route-panel-header">
           <h1>Open World Route Map</h1>
           <p id="route-status">Enter a destination. Start is your current location by default.</p>
+          <button id="toggle-route-panel" class="panel-toggle" type="button" aria-expanded="true" aria-controls="route-form side-missions directions-panel key-form" aria-label="Minimize route panel">-</button>
         </div>
         <form id="route-form" class="route-form" hidden>
           <label for="origin">Start</label>
@@ -67,6 +68,6 @@
     </main>
     <script src="open-world-game-map-style.js?v=4"></script>
     <script src="config.js?v=5"></script>
-    <script src="preview.js?v=18"></script>
+    <script src="preview.js?v=20"></script>
   </body>
 </html>
