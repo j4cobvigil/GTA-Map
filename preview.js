@@ -8,6 +8,9 @@
   const startDriveButton = document.querySelector("#start-drive");
   const demoDriveButton = document.querySelector("#demo-drive");
   const directionsPanel = document.querySelector("#directions-panel");
+  const sideMissionsPanel = document.querySelector("#side-missions");
+  const sideMissionsList = document.querySelector("#side-missions-list");
+  const sideMissionsCount = document.querySelector("#side-missions-count");
   const navigationHud = document.querySelector("#navigation-hud");
   const navMode = document.querySelector("#nav-mode");
   const navInstruction = document.querySelector("#nav-instruction");
@@ -16,6 +19,7 @@
   const keyForm = document.querySelector("#key-form");
   const keyInput = document.querySelector("#api-key");
   const mapElement = document.querySelector("#map");
+  const fireworksElement = document.querySelector("#fireworks");
   const fallback = document.querySelector("#fallback");
   const params = new URLSearchParams(window.location.search);
   const urlKey = params.get("key");
@@ -51,6 +55,17 @@
     "lodging",
     "atm",
   ];
+  const sideMissionTypes = [
+    { type: "tourist_attraction", label: "Landmark" },
+    { type: "museum", label: "Museum" },
+    { type: "park", label: "Outdoor" },
+    { type: "art_gallery", label: "Art" },
+    { type: "bowling_alley", label: "Arcade" },
+    { type: "movie_theater", label: "Cinema" },
+    { type: "amusement_park", label: "Thrill" },
+    { type: "zoo", label: "Wildlife" },
+    { type: "aquarium", label: "Aquarium" },
+  ];
   const markerStyles = {
     restaurant: { label: "Eats", glyph: "M18 8 L18 24 M24 8 L24 24 M14 8 L14 14 Q14 18 18 18 Q22 18 22 14 L22 8", color: "#f5d77d" },
     gas_station: { label: "Gas", glyph: "M13 10 H23 V28 H13 Z M23 14 H27 L30 18 V28 M16 14 H20", color: "#9fd6d8" },
@@ -59,6 +74,18 @@
     lodging: { label: "Stay", glyph: "M11 27 V12 M11 20 H29 V27 M14 18 H20 M20 20 V27 M29 27 V17", color: "#d8c9ff" },
     atm: { label: "Cash", glyph: "M12 12 H28 V28 H12 Z M16 20 H24 M18 16 H22 M18 24 H22", color: "#8fdb9d" },
     default: { label: "Biz", glyph: "M20 10 L29 18 L26 29 H14 L11 18 Z M20 16 V24", color: "#f1ead2" },
+  };
+  const sideMissionStyles = {
+    tourist_attraction: { label: "Landmark", color: "#ff63d8" },
+    museum: { label: "Museum", color: "#8e7bff" },
+    park: { label: "Outdoor", color: "#5eff7d" },
+    art_gallery: { label: "Art", color: "#ffb800" },
+    bowling_alley: { label: "Arcade", color: "#54f2f2" },
+    movie_theater: { label: "Cinema", color: "#ff375f" },
+    amusement_park: { label: "Thrill", color: "#f5d77d" },
+    zoo: { label: "Wildlife", color: "#c8db9b" },
+    aquarium: { label: "Aquarium", color: "#00b7ff" },
+    default: { label: "Side Mission", color: "#f5d77d" },
   };
   let map;
   let autocompleteBounds;
@@ -71,15 +98,21 @@
   let placesService;
   let mapUsesVectorId = false;
   let businessMarkers = [];
+  let sideMissionMarkers = [];
+  let sideMissionPlaces = [];
   let hasSubmittedRoute = false;
   let routeTimer = 0;
   let businessTimer = 0;
   let lastBusinessSearch = null;
+  let placeSearchToken = 0;
   let currentRoute = null;
+  let currentDestination = null;
   let routePath = [];
   let routeSteps = [];
   let routeLengthMeters = 0;
   let navigationRouteLine = null;
+  let completedDestination = null;
+  let completedDestinationMarker = null;
   let vehicleMarker = null;
   let navigationMode = null;
   let watchId = null;
@@ -428,14 +461,158 @@
     });
   }
 
+  function makeCompletedDestinationIcon() {
+    const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 58">
+        <defs>
+          <radialGradient id="targetGlow" cx="50%" cy="38%" r="62%">
+            <stop offset="0" stop-color="#fff7d8"/>
+            <stop offset="0.42" stop-color="#00b7ff"/>
+            <stop offset="1" stop-color="#101828"/>
+          </radialGradient>
+          <filter id="shadow" x="-35%" y="-25%" width="170%" height="170%">
+            <feDropShadow dx="0" dy="5" stdDeviation="3.5" flood-color="#050605" flood-opacity="0.78"/>
+          </filter>
+        </defs>
+        <g filter="url(#shadow)">
+          <path d="M24 3 C12.7 3 5 10.8 5 22 C5 38 24 55 24 55 C24 55 43 38 43 22 C43 10.8 35.3 3 24 3 Z" fill="#050605"/>
+          <path d="M24 7 C15.2 7 9 13.3 9 22 C9 34.2 20.2 46.3 24 50 C27.8 46.3 39 34.2 39 22 C39 13.3 32.8 7 24 7 Z" fill="url(#targetGlow)"/>
+          <circle cx="24" cy="22" r="13" fill="#14170f" opacity="0.92"/>
+          <path d="M17 16 H30 L28 21 H17 Z M17 16 V32" fill="none" stroke="#fff7d8" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M20 18 H25 M20 21 H28" stroke="#00b7ff" stroke-width="1.8" stroke-linecap="round"/>
+          <circle cx="24" cy="22" r="4" fill="#f5d77d"/>
+        </g>
+      </svg>
+    `.trim();
+
+    return {
+      url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
+      scaledSize: new google.maps.Size(42, 51),
+      anchor: new google.maps.Point(21, 51),
+    };
+  }
+
+  function clearCompletedDestinationMarker() {
+    if (completedDestinationMarker) {
+      completedDestinationMarker.setMap(null);
+      completedDestinationMarker = null;
+    }
+
+    completedDestination = null;
+  }
+
+  function showCompletedDestinationMarker(destination) {
+    if (!destination?.location || !map) {
+      return;
+    }
+
+    clearCompletedDestinationMarker();
+    completedDestination = destination;
+    completedDestinationMarker = new google.maps.Marker({
+      map,
+      position: destination.location,
+      title: destination.title || "Destination reached",
+      icon: makeCompletedDestinationIcon(),
+      zIndex: 2200,
+    });
+
+    const infoWindow = new google.maps.InfoWindow({
+      content: `<strong>Destination complete</strong><br>${escapeHtml(destination.title || "Arrived")}`,
+    });
+
+    completedDestinationMarker.addListener("click", () => infoWindow.open({
+      anchor: completedDestinationMarker,
+      map,
+    }));
+  }
+
+  function createDirectionsRenderer() {
+    const renderer = new google.maps.DirectionsRenderer({
+      map,
+      panel: directionsPanel,
+      preserveViewport: false,
+      suppressMarkers: false,
+      polylineOptions: routeLineStyle.normal,
+    });
+
+    renderer.addListener("directions_changed", updateRouteSummary);
+    return renderer;
+  }
+
+  function clearRenderedRoute() {
+    clearNavigationRouteLine();
+
+    if (directionsRenderer) {
+      google.maps.event?.clearListeners?.(directionsRenderer, "directions_changed");
+      directionsRenderer.setMap(null);
+    }
+
+    directionsPanel.innerHTML = "";
+    directionsPanel.hidden = true;
+    currentRoute = null;
+    currentDestination = null;
+    routePath = [];
+    routeSteps = [];
+    routeLengthMeters = 0;
+    startDriveButton.disabled = true;
+    demoDriveButton.disabled = true;
+
+    if (map && google.maps.DirectionsRenderer) {
+      directionsRenderer = createDirectionsRenderer();
+    }
+  }
+
+  function launchFireworks() {
+    if (!fireworksElement) {
+      return;
+    }
+
+    const colors = ["#00b7ff", "#54f2f2", "#f5d77d", "#ff63d8", "#5eff7d", "#ff375f"];
+    const burstCount = 6;
+    const sparksPerBurst = 24;
+
+    fireworksElement.innerHTML = "";
+    fireworksElement.hidden = false;
+
+    for (let burstIndex = 0; burstIndex < burstCount; burstIndex += 1) {
+      const burst = document.createElement("div");
+      burst.className = "firework-burst";
+      burst.style.left = `${18 + Math.random() * 64}%`;
+      burst.style.top = `${12 + Math.random() * 52}%`;
+
+      for (let sparkIndex = 0; sparkIndex < sparksPerBurst; sparkIndex += 1) {
+        const spark = document.createElement("span");
+        const color = colors[(sparkIndex + burstIndex) % colors.length];
+        spark.className = "firework-spark";
+        spark.style.setProperty("--spark-color", color);
+        spark.style.setProperty("--spark-angle", `${(360 / sparksPerBurst) * sparkIndex}deg`);
+        spark.style.setProperty("--spark-distance", `${54 + Math.random() * 62}px`);
+        spark.style.animationDelay = `${burstIndex * 110 + Math.random() * 80}ms`;
+        burst.appendChild(spark);
+      }
+
+      fireworksElement.appendChild(burst);
+    }
+
+    window.setTimeout(() => {
+      fireworksElement.innerHTML = "";
+      fireworksElement.hidden = true;
+    }, 2100);
+  }
+
   function prepareRoute(result) {
     currentRoute = result;
     const route = result.routes[0];
     const legs = route?.legs || [];
+    const lastLeg = legs[legs.length - 1];
     const detailedPath = legs.flatMap((leg) => (
       leg.steps || []
     ).flatMap((step) => step.path || []));
     routePath = detailedPath.length ? detailedPath : route?.overview_path || [];
+    currentDestination = {
+      location: lastLeg?.end_location || routePath[routePath.length - 1] || null,
+      title: lastLeg?.end_address || destinationInput.value.trim() || "Destination",
+    };
     routeLengthMeters = getPathLength(routePath);
     let cursor = 0;
 
@@ -464,6 +641,7 @@
     }
 
     navigationMode = modeKey;
+    placeSearchToken += 1;
     switchRouteMapMode(true, {
       zoom: 18,
       tilt: 67.5,
@@ -488,7 +666,8 @@
     return true;
   }
 
-  function stopNavigation() {
+  function stopNavigation(options = {}) {
+    const { revealDirections = true } = options;
     const wasNavigating = Boolean(navigationMode);
 
     document.body.classList.remove("is-driving");
@@ -514,7 +693,7 @@
       vehicleMarker = null;
     }
 
-    if (currentRoute) {
+    if (revealDirections && currentRoute) {
       directionsPanel.hidden = false;
     }
 
@@ -526,6 +705,37 @@
         heading: useVectorMapId ? map?.getHeading?.() || 0 : 0,
       });
     }
+  }
+
+  function hasReachedDestination(position, distanceAlongRoute) {
+    if (!routeLengthMeters) {
+      return false;
+    }
+
+    const remainingRouteMeters = Math.max(routeLengthMeters - distanceAlongRoute, 0);
+    const destinationDistanceMeters = currentDestination?.location
+      ? getSegmentLength(position, currentDestination.location)
+      : remainingRouteMeters;
+
+    return remainingRouteMeters <= 35 || destinationDistanceMeters <= 55;
+  }
+
+  function completeArrival() {
+    const fallbackDestination = routePath.length
+      ? { location: routePath[routePath.length - 1], title: destinationInput.value.trim() || "Destination" }
+      : null;
+    const destination = currentDestination || fallbackDestination;
+
+    launchFireworks();
+    stopNavigation({ revealDirections: false });
+    clearRenderedRoute();
+
+    if (destination) {
+      showCompletedDestinationMarker(destination);
+    }
+
+    setStatus("Arrived. Route cleared.", "success");
+    return true;
   }
 
   function parseCoordinates(value) {
@@ -627,9 +837,196 @@
     return businessTypes.find((type) => place.types?.includes(type)) || "default";
   }
 
+  function getPrimarySideMissionType(place) {
+    return sideMissionTypes.find((missionType) => place.types?.includes(missionType.type))?.type || "default";
+  }
+
+  function makeSideMissionIcon(type) {
+    const style = sideMissionStyles[type] || sideMissionStyles.default;
+    const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 56">
+        <defs>
+          <radialGradient id="missionGlow" cx="50%" cy="35%" r="62%">
+            <stop offset="0" stop-color="#fff7d8"/>
+            <stop offset="0.38" stop-color="${style.color}"/>
+            <stop offset="1" stop-color="#221033"/>
+          </radialGradient>
+          <filter id="shadow" x="-30%" y="-20%" width="160%" height="160%">
+            <feDropShadow dx="0" dy="4" stdDeviation="3" flood-color="#050605" flood-opacity="0.75"/>
+          </filter>
+        </defs>
+        <g filter="url(#shadow)">
+          <path d="M24 3 C12.7 3 5 10.8 5 22 C5 37.5 24 53 24 53 C24 53 43 37.5 43 22 C43 10.8 35.3 3 24 3 Z" fill="#050605"/>
+          <path d="M24 7 C15.4 7 9 13.2 9 22 C9 33.3 20.1 44.7 24 48.4 C27.9 44.7 39 33.3 39 22 C39 13.2 32.6 7 24 7 Z" fill="url(#missionGlow)"/>
+          <circle cx="24" cy="22" r="13" fill="#14170f" opacity="0.92"/>
+          <path d="M24 10 L27.6 18.2 L36 19 L29.6 24.4 L31.5 33 L24 28.5 L16.5 33 L18.4 24.4 L12 19 L20.4 18.2 Z" fill="${style.color}" stroke="#fff7d8" stroke-width="1.6" stroke-linejoin="round"/>
+          <circle cx="24" cy="22" r="4" fill="#fff7d8"/>
+        </g>
+      </svg>
+    `.trim();
+
+    return {
+      url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
+      scaledSize: new google.maps.Size(38, 44),
+      anchor: new google.maps.Point(19, 44),
+    };
+  }
+
+  function getSideMissionId(place) {
+    if (place.place_id) {
+      return place.place_id;
+    }
+
+    const location = place.geometry?.location;
+    return `${place.name || "mission"}:${location?.lat?.() || 0}:${location?.lng?.() || 0}`;
+  }
+
+  function getSideMissionDistance(place, origin) {
+    if (!origin || !place.geometry?.location) {
+      return 0;
+    }
+
+    return getSegmentLength(origin, place.geometry.location);
+  }
+
+  function formatMissionDistance(distanceMeters) {
+    if (!distanceMeters) {
+      return "nearby";
+    }
+
+    const miles = metersToMiles(distanceMeters);
+    return miles < 0.1 ? "nearby" : `${miles.toFixed(1)} mi`;
+  }
+
+  function normalizeSideMission(place, origin) {
+    const type = getPrimarySideMissionType(place);
+    const style = sideMissionStyles[type] || sideMissionStyles.default;
+
+    return {
+      id: getSideMissionId(place),
+      place,
+      type,
+      label: style.label,
+      distanceMeters: getSideMissionDistance(place, origin),
+      rating: place.rating || 0,
+      ratingsTotal: place.user_ratings_total || 0,
+    };
+  }
+
+  function sortSideMissions() {
+    sideMissionPlaces.sort((first, second) => (
+      second.rating - first.rating
+      || second.ratingsTotal - first.ratingsTotal
+      || first.distanceMeters - second.distanceMeters
+    ));
+  }
+
+  function renderSideMissions() {
+    if (!sideMissionsPanel || !sideMissionsList || !sideMissionsCount) {
+      return;
+    }
+
+    if (!sideMissionPlaces.length) {
+      sideMissionsPanel.hidden = true;
+      sideMissionsList.innerHTML = "";
+      sideMissionsCount.textContent = "0 nearby";
+      return;
+    }
+
+    sideMissionsPanel.hidden = false;
+    sideMissionsCount.textContent = `${sideMissionPlaces.length} nearby`;
+    sideMissionsList.innerHTML = sideMissionPlaces.map((mission, index) => {
+      const name = escapeHtml(mission.place.name || mission.label);
+      const vicinity = mission.place.vicinity ? escapeHtml(mission.place.vicinity) : "";
+      const rating = mission.rating ? ` / ${mission.rating.toFixed(1)} stars` : "";
+      const meta = `${mission.label} / ${formatMissionDistance(mission.distanceMeters)}${rating}`;
+
+      return `
+        <article class="side-mission-card">
+          <button class="side-mission-main" type="button" data-side-mission-focus="${escapeHtml(mission.id)}">
+            <span class="side-mission-rank">SM-${String(index + 1).padStart(2, "0")}</span>
+            <strong>${name}</strong>
+            <span>${escapeHtml(meta)}</span>
+            ${vicinity ? `<small>${vicinity}</small>` : ""}
+          </button>
+          <button class="side-mission-route" type="button" data-side-mission-route="${escapeHtml(mission.id)}">Route</button>
+        </article>
+      `;
+    }).join("");
+  }
+
+  function clearSideMissionMarkers() {
+    sideMissionMarkers.forEach((marker) => marker.setMap(null));
+    sideMissionMarkers = [];
+    sideMissionPlaces = [];
+    renderSideMissions();
+  }
+
   function clearBusinessMarkers() {
     businessMarkers.forEach((marker) => marker.setMap(null));
     businessMarkers = [];
+  }
+
+  function addSideMission(place, origin) {
+    const mission = normalizeSideMission(place, origin);
+    const marker = new google.maps.Marker({
+      map,
+      position: place.geometry.location,
+      title: `Side Mission: ${place.name}`,
+      icon: makeSideMissionIcon(mission.type),
+      zIndex: 700,
+    });
+    const distance = formatMissionDistance(mission.distanceMeters);
+    const rating = mission.rating ? `<br>${mission.rating.toFixed(1)} stars` : "";
+    const infoWindow = new google.maps.InfoWindow({
+      content: `<strong>Side Mission</strong><br>${escapeHtml(place.name || mission.label)}<br>${escapeHtml(mission.label)} / ${escapeHtml(distance)}${rating}`,
+    });
+
+    marker.sideMissionId = mission.id;
+    marker.addListener("click", () => infoWindow.open({ anchor: marker, map }));
+    sideMissionMarkers.push(marker);
+    sideMissionPlaces.push(mission);
+    sortSideMissions();
+    renderSideMissions();
+  }
+
+  function findSideMission(id) {
+    return sideMissionPlaces.find((mission) => mission.id === id);
+  }
+
+  function focusSideMission(id) {
+    const mission = findSideMission(id);
+
+    if (!mission?.place.geometry?.location || !map) {
+      return;
+    }
+
+    map.panTo(mission.place.geometry.location);
+    map.setZoom(Math.max(map.getZoom?.() || 15, 16));
+    const marker = sideMissionMarkers.find((candidate) => candidate.sideMissionId === id);
+
+    if (marker && google.maps.Animation?.BOUNCE) {
+      marker.setAnimation(google.maps.Animation.BOUNCE);
+      window.setTimeout(() => marker.setAnimation(null), 900);
+    }
+  }
+
+  function routeToSideMission(id) {
+    const mission = findSideMission(id);
+
+    if (!mission) {
+      return;
+    }
+
+    const place = mission.place;
+    destinationPlace = {
+      place_id: place.place_id,
+      name: place.name,
+      formatted_address: place.vicinity || place.name,
+    };
+    destinationInput.value = place.name || place.vicinity || "";
+    focusSideMission(id);
+    route();
   }
 
   function getCurrentMapCamera(useVectorMap) {
@@ -652,6 +1049,7 @@
 
   function createRouteMap(useVectorMap = false, overrides = {}) {
     const shouldUseVectorMap = Boolean(configuredMapId && useVectorMap);
+    const destinationToRestore = completedDestination;
     const mapOptions = {
       ...getCurrentMapCamera(shouldUseVectorMap),
       ...overrides,
@@ -663,6 +1061,7 @@
     }
 
     clearBusinessMarkers();
+    clearSideMissionMarkers();
     map = window.createOpenWorldGameMap(mapElement, mapOptions);
     mapUsesVectorId = shouldUseVectorMap;
     placesService = google.maps.places ? new google.maps.places.PlacesService(map) : null;
@@ -677,6 +1076,10 @@
     }
 
     rebindAutocompleteBounds();
+
+    if (destinationToRestore) {
+      showCompletedDestinationMarker(destinationToRestore);
+    }
 
     if (!navigationMode) {
       lastBusinessSearch = null;
@@ -703,6 +1106,17 @@
     createRouteMap(shouldUseVectorMap, overrides);
   }
 
+  function getNearbySearchOrigin(fallbackCenter) {
+    if (currentLocationCache && Date.now() - currentLocationCache.timestamp < 600000) {
+      return new google.maps.LatLng(
+        currentLocationCache.location.lat,
+        currentLocationCache.location.lng,
+      );
+    }
+
+    return fallbackCenter;
+  }
+
   function refreshBusinesses() {
     if (!placesService || !map) {
       return;
@@ -714,7 +1128,8 @@
       return;
     }
 
-    const searchCenter = { lat: center.lat(), lng: center.lng() };
+    const searchOrigin = getNearbySearchOrigin(center);
+    const searchCenter = { lat: searchOrigin.lat(), lng: searchOrigin.lng() };
     const movedFarEnough = !lastBusinessSearch
       || Math.abs(lastBusinessSearch.lat - searchCenter.lat) > 0.01
       || Math.abs(lastBusinessSearch.lng - searchCenter.lng) > 0.01;
@@ -724,15 +1139,22 @@
     }
 
     lastBusinessSearch = searchCenter;
+    const searchToken = ++placeSearchToken;
     clearBusinessMarkers();
+    clearSideMissionMarkers();
     const seenPlaceIds = new Set();
+    const seenSideMissionIds = new Set();
 
     businessTypes.forEach((type) => {
       placesService.nearbySearch({
-        location: center,
+        location: searchOrigin,
         radius: 2200,
         type,
       }, (results, status) => {
+        if (searchToken !== placeSearchToken || navigationMode) {
+          return;
+        }
+
         if (status !== google.maps.places.PlacesServiceStatus.OK || !results?.length) {
           return;
         }
@@ -761,6 +1183,41 @@
 
           marker.addListener("click", () => infoWindow.open({ anchor: marker, map }));
           businessMarkers.push(marker);
+        });
+      });
+    });
+
+    sideMissionTypes.forEach((missionType) => {
+      placesService.nearbySearch({
+        location: searchOrigin,
+        radius: 4200,
+        type: missionType.type,
+      }, (results, status) => {
+        if (searchToken !== placeSearchToken || navigationMode) {
+          return;
+        }
+
+        if (status !== google.maps.places.PlacesServiceStatus.OK || !results?.length) {
+          return;
+        }
+
+        const places = results.filter((place) => {
+          const id = getSideMissionId(place);
+
+          if (!place.geometry?.location || seenSideMissionIds.has(id)) {
+            return false;
+          }
+
+          seenSideMissionIds.add(id);
+          return true;
+        }).slice(0, 3);
+
+        places.forEach((place) => {
+          if (sideMissionPlaces.length >= 8) {
+            return;
+          }
+
+          addSideMission(place, searchOrigin);
         });
       });
     });
@@ -826,13 +1283,7 @@
       { lat: 32.8, lng: -103.85 },
     );
     directionsService = new google.maps.DirectionsService();
-    directionsRenderer = new google.maps.DirectionsRenderer({
-      map,
-      panel: directionsPanel,
-      preserveViewport: false,
-      suppressMarkers: false,
-      polylineOptions: routeLineStyle.normal,
-    });
+    directionsRenderer = createDirectionsRenderer();
     originAutocomplete = setupAutocomplete(originInput, (place) => {
       originPlace = place;
     });
@@ -846,10 +1297,10 @@
     });
     destinationInput.addEventListener("input", () => {
       destinationPlace = null;
+      clearCompletedDestinationMarker();
       queueRoute();
     });
     travelModeSelect.addEventListener("change", queueRoute);
-    directionsRenderer.addListener("directions_changed", updateRouteSummary);
 
     startDriveButton.disabled = true;
     demoDriveButton.disabled = true;
@@ -861,6 +1312,7 @@
     keyForm.hidden = false;
     routeForm.hidden = true;
     directionsPanel.hidden = true;
+    sideMissionsPanel.hidden = true;
     keyInput.placeholder = "AIza...";
     setStatus(message, "error");
   }
@@ -940,6 +1392,7 @@
     setVehiclePosition(position, heading);
     moveCamera(position, heading);
     updateNavigationHud(distanceAlongRoute, "Live GPS");
+    return hasReachedDestination(position, distanceAlongRoute) ? completeArrival() : false;
   }
 
   function startLiveDrive() {
@@ -957,8 +1410,11 @@
 
     watchId = navigator.geolocation.watchPosition(
       (position) => {
-        updateLivePosition(position.coords);
-        setStatus("Live drive mode active.", "success");
+        const arrived = updateLivePosition(position.coords);
+
+        if (!arrived) {
+          setStatus("Live drive mode active.", "success");
+        }
       },
       () => {
         setStatus("Location permission was blocked. Running preview drive.", "error");
@@ -995,7 +1451,7 @@
     updateNavigationHud(distance, "Preview Drive");
 
     if (distance >= routeLengthMeters) {
-      setStatus("Arrived.", "success");
+      completeArrival();
       return;
     }
 
@@ -1029,6 +1485,7 @@
     }
 
     hasSubmittedRoute = true;
+    clearCompletedDestinationMarker();
     let resolvedOrigin;
 
     try {
@@ -1052,6 +1509,7 @@
         if (status !== "OK" || !result) {
           directionsPanel.hidden = true;
           currentRoute = null;
+          currentDestination = null;
           routePath = [];
           routeSteps = [];
           routeLengthMeters = 0;
@@ -1101,6 +1559,20 @@
   startDriveButton.addEventListener("click", startLiveDrive);
   demoDriveButton.addEventListener("click", startDemoDrive);
   stopNavigationButton.addEventListener("click", stopNavigation);
+
+  sideMissionsList?.addEventListener("click", (event) => {
+    const routeButton = event.target.closest("[data-side-mission-route]");
+    const focusButton = event.target.closest("[data-side-mission-focus]");
+
+    if (routeButton) {
+      routeToSideMission(routeButton.dataset.sideMissionRoute);
+      return;
+    }
+
+    if (focusButton) {
+      focusSideMission(focusButton.dataset.sideMissionFocus);
+    }
+  });
 
   keyForm.addEventListener("submit", (event) => {
     event.preventDefault();

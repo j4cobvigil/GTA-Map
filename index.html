@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Open World Google Maps Skin</title>
-    <link rel="stylesheet" href="styles.css?v=4">
+    <link rel="stylesheet" href="styles.css?v=6">
   </head>
   <body>
     <main class="shell">
@@ -33,6 +33,13 @@
             <button id="demo-drive" type="button" disabled>Preview Drive</button>
           </div>
         </form>
+        <section id="side-missions" class="side-missions" aria-label="Side missions" hidden>
+          <div class="side-missions-header">
+            <h2>Side Missions</h2>
+            <span id="side-missions-count">0 nearby</span>
+          </div>
+          <div id="side-missions-list" class="side-missions-list"></div>
+        </section>
         <section id="directions-panel" class="directions-panel" aria-label="Driving directions"></section>
         <form id="key-form" class="key-form" hidden>
           <label for="api-key">API key</label>
@@ -48,6 +55,7 @@
           <span class="district district-d">Canyon</span>
         </div>
       </section>
+      <div id="fireworks" class="fireworks" aria-hidden="true" hidden></div>
       <section id="navigation-hud" class="navigation-hud" aria-label="Navigation status" hidden>
         <div>
           <span id="nav-mode" class="nav-mode">Drive</span>
@@ -59,6 +67,6 @@
     </main>
     <script src="open-world-game-map-style.js?v=4"></script>
     <script src="config.js?v=5"></script>
-    <script src="preview.js?v=16"></script>
+    <script src="preview.js?v=18"></script>
   </body>
 </html>
